@@ -1,5 +1,6 @@
 use std::{
     char,
+    collections::HashSet,
     fmt::{Debug, Display, Write},
 };
 
@@ -7,7 +8,7 @@ use std::{
 /// Can represent all relevant jamo
 /// enum values are the unicode value
 /// for specific jamo
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Jamo {
     ///ㄱ
     G = 0x3131,
@@ -112,6 +113,127 @@ pub enum Jamo {
     ///ㅣ
     I,
 }
+impl Jamo {
+    pub fn id(self) -> usize {
+        self as usize - 0x3131
+    }
+
+    pub fn all() -> Vec<Jamo> {
+        vec![
+            Jamo::G,
+            Jamo::Gg,
+            Jamo::Gs,
+            Jamo::N,
+            Jamo::Nc,
+            Jamo::Nch,
+            Jamo::D,
+            Jamo::Dd,
+            Jamo::R,
+            Jamo::Lg,
+            Jamo::Lm,
+            Jamo::Lb,
+            Jamo::Ls,
+            Jamo::Lt,
+            Jamo::Lph,
+            Jamo::Lh,
+            Jamo::M,
+            Jamo::B,
+            Jamo::Bb,
+            Jamo::Bs,
+            Jamo::S,
+            Jamo::Ss,
+            Jamo::Silent,
+            Jamo::J,
+            Jamo::Jj,
+            Jamo::Ch,
+            Jamo::K,
+            Jamo::T,
+            Jamo::P,
+            Jamo::H,
+            Jamo::A,
+            Jamo::Ae,
+            Jamo::Ya,
+            Jamo::Yae,
+            Jamo::Eo,
+            Jamo::E,
+            Jamo::Yeo,
+            Jamo::Ye,
+            Jamo::O,
+            Jamo::Wa,
+            Jamo::Wae,
+            Jamo::Oe,
+            Jamo::Yo,
+            Jamo::U,
+            Jamo::Wo,
+            Jamo::We,
+            Jamo::Wi,
+            Jamo::Yu,
+            Jamo::Eu,
+            Jamo::Ui,
+            Jamo::I,
+        ]
+    }
+
+    pub fn all_initial() -> Vec<Jamo> {
+        InitialJamo::all().iter().map(Jamo::from).collect()
+    }
+
+    pub fn all_medial() -> Vec<Jamo> {
+        MedialJamo::all().iter().map(Jamo::from).collect()
+    }
+
+    pub fn possible_medial(jamo: MedialJamo) -> Vec<Jamo> {
+        jamo.combine_possible().iter().map(Jamo::from).collect()
+    }
+
+    pub fn all_finale() -> Vec<Jamo> {
+        FinalJamo::all().iter().map(Jamo::from).collect()
+    }
+
+    pub fn possible_finale(jamo: FinalJamo) -> Vec<Jamo> {
+        jamo.append_possible().iter().map(Jamo::from).collect()
+    }
+
+    pub fn all_multi(initial: bool, medial: bool, finale: bool) -> Vec<Jamo> {
+        let mut s = HashSet::<Jamo>::default();
+        if initial {
+            s.extend(InitialJamo::all().iter().map(Jamo::from));
+        }
+        if medial {
+            s.extend(MedialJamo::all().iter().map(Jamo::from));
+        }
+        if finale {
+            s.extend(FinalJamo::all().iter().map(Jamo::from));
+        }
+        s.into_iter().collect()
+    }
+
+    pub fn all_or_possible(
+        initial: bool,
+        medial: (bool, Option<MedialJamo>),
+        finale: (bool, Option<FinalJamo>),
+    ) -> Vec<Jamo> {
+        let mut s = HashSet::<Jamo>::default();
+        if initial {
+            s.extend(InitialJamo::all().iter().map(Jamo::from));
+        }
+        if medial.0
+            && let Some(jamo) = medial.1
+        {
+            s.extend(jamo.combine_possible().iter().map(Jamo::from));
+        } else if medial.0 {
+            s.extend(MedialJamo::all().iter().map(Jamo::from));
+        }
+        if finale.0
+            && let Some(jamo) = finale.1
+        {
+            s.extend(jamo.append_possible().iter().map(Jamo::from));
+        } else if finale.0 {
+            s.extend(FinalJamo::all().iter().map(Jamo::from));
+        }
+        s.into_iter().collect()
+    }
+}
 impl From<Jamo> for char {
     fn from(value: Jamo) -> Self {
         // Safe ! all variants of jamo have valid unicode values
@@ -187,7 +309,7 @@ impl Display for Jamo {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum InitialJamo {
     ///ㄱ
     G = 0x1100,
@@ -228,6 +350,35 @@ pub enum InitialJamo {
     ///ㅎ
     H,
 }
+impl InitialJamo {
+    pub fn id(self) -> usize {
+        self as usize - 0x1100
+    }
+
+    pub fn all() -> Vec<InitialJamo> {
+        vec![
+            InitialJamo::G,
+            InitialJamo::Gg,
+            InitialJamo::N,
+            InitialJamo::D,
+            InitialJamo::Dd,
+            InitialJamo::R,
+            InitialJamo::M,
+            InitialJamo::B,
+            InitialJamo::Bb,
+            InitialJamo::S,
+            InitialJamo::Ss,
+            InitialJamo::Silent,
+            InitialJamo::J,
+            InitialJamo::Jj,
+            InitialJamo::Ch,
+            InitialJamo::K,
+            InitialJamo::T,
+            InitialJamo::P,
+            InitialJamo::H,
+        ]
+    }
+}
 impl From<InitialJamo> for Jamo {
     fn from(value: InitialJamo) -> Self {
         match value {
@@ -251,6 +402,11 @@ impl From<InitialJamo> for Jamo {
             InitialJamo::P => Jamo::P,
             InitialJamo::H => Jamo::H,
         }
+    }
+}
+impl From<&InitialJamo> for Jamo {
+    fn from(value: &InitialJamo) -> Self {
+        Jamo::from(*value)
     }
 }
 impl TryFrom<Jamo> for InitialJamo {
@@ -324,7 +480,7 @@ impl Display for InitialJamo {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MedialJamo {
     ///ㅏ
     A = 0x1161,
@@ -369,6 +525,110 @@ pub enum MedialJamo {
     ///ㅣ
     I,
 }
+#[derive(Debug, Clone, Copy)]
+pub enum MedialKind {
+    Tall,
+    Wide,
+    Full,
+}
+impl MedialJamo {
+    pub fn id(self) -> usize {
+        self as usize - 0x1161
+    }
+
+    pub fn all() -> Vec<MedialJamo> {
+        vec![
+            MedialJamo::A,
+            MedialJamo::Ae,
+            MedialJamo::Ya,
+            MedialJamo::Yae,
+            MedialJamo::Eo,
+            MedialJamo::E,
+            MedialJamo::Yeo,
+            MedialJamo::Ye,
+            MedialJamo::O,
+            MedialJamo::Wa,
+            MedialJamo::Wae,
+            MedialJamo::Oe,
+            MedialJamo::Yo,
+            MedialJamo::U,
+            MedialJamo::Wo,
+            MedialJamo::We,
+            MedialJamo::Wi,
+            MedialJamo::Yu,
+            MedialJamo::Eu,
+            MedialJamo::Ui,
+            MedialJamo::I,
+        ]
+    }
+
+    pub fn kind(&self) -> MedialKind {
+        match self {
+            MedialJamo::A => MedialKind::Tall,
+            MedialJamo::Ae => MedialKind::Tall,
+            MedialJamo::Ya => MedialKind::Tall,
+            MedialJamo::Yae => MedialKind::Tall,
+            MedialJamo::Eo => MedialKind::Tall,
+            MedialJamo::E => MedialKind::Tall,
+            MedialJamo::Yeo => MedialKind::Tall,
+            MedialJamo::Ye => MedialKind::Tall,
+            MedialJamo::O => MedialKind::Wide,
+            MedialJamo::Wa => MedialKind::Full,
+            MedialJamo::Wae => MedialKind::Full,
+            MedialJamo::Oe => MedialKind::Full,
+            MedialJamo::Yo => MedialKind::Wide,
+            MedialJamo::U => MedialKind::Wide,
+            MedialJamo::Wo => MedialKind::Full,
+            MedialJamo::We => MedialKind::Full,
+            MedialJamo::Wi => MedialKind::Full,
+            MedialJamo::Yu => MedialKind::Wide,
+            MedialJamo::Eu => MedialKind::Wide,
+            MedialJamo::Ui => MedialKind::Full,
+            MedialJamo::I => MedialKind::Tall,
+        }
+    }
+
+    pub fn combine_possible(self) -> Vec<MedialJamo> {
+        match self {
+            MedialJamo::A => vec![MedialJamo::O],
+            MedialJamo::Ae => vec![MedialJamo::O],
+            MedialJamo::Eo => vec![MedialJamo::U],
+            MedialJamo::E => vec![MedialJamo::U],
+            MedialJamo::O => vec![MedialJamo::A, MedialJamo::Ae, MedialJamo::I],
+            MedialJamo::U => vec![MedialJamo::Eo, MedialJamo::E, MedialJamo::I],
+            MedialJamo::Eu => vec![MedialJamo::I],
+            MedialJamo::I => vec![MedialJamo::O, MedialJamo::U, MedialJamo::Eu],
+            _ => vec![],
+        }
+    }
+
+    pub fn combine(self, other: MedialJamo) -> JamoResult<Self> {
+        // Correction: Wide before Tall
+        match (self.kind(), other.kind()) {
+            (MedialKind::Wide, MedialKind::Tall) => (), // continue
+            (MedialKind::Tall, MedialKind::Wide) => {
+                return other.combine(self);
+            }
+            _ => {
+                return Err(JamoError::IncompatibleCombine(
+                    self.into(),
+                    other.into(),
+                ));
+            }
+        };
+
+        match (self, other) {
+            (MedialJamo::O, MedialJamo::A) => Ok(MedialJamo::Wa),
+            (MedialJamo::O, MedialJamo::Ae) => Ok(MedialJamo::Wae),
+            (MedialJamo::O, MedialJamo::I) => Ok(MedialJamo::Oe),
+            (MedialJamo::U, MedialJamo::Eo) => Ok(MedialJamo::Wo),
+            (MedialJamo::U, MedialJamo::E) => Ok(MedialJamo::We),
+            (MedialJamo::U, MedialJamo::I) => Ok(MedialJamo::Wi),
+            (MedialJamo::Eu, MedialJamo::I) => Ok(MedialJamo::Ui),
+            _ => Err(JamoError::IncompatibleCombine(self.into(), other.into())),
+        }
+    }
+}
 impl From<MedialJamo> for Jamo {
     fn from(value: MedialJamo) -> Self {
         match value {
@@ -394,6 +654,11 @@ impl From<MedialJamo> for Jamo {
             MedialJamo::Ui => Jamo::Ui,
             MedialJamo::I => Jamo::I,
         }
+    }
+}
+impl From<&MedialJamo> for Jamo {
+    fn from(value: &MedialJamo) -> Self {
+        Jamo::from(*value)
     }
 }
 impl TryFrom<Jamo> for MedialJamo {
@@ -470,8 +735,13 @@ impl Display for MedialJamo {
         f.write_char(self.into())
     }
 }
+impl Display for MedialKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FinalJamo {
     ///ㄱ
     G = 0x11A8,
@@ -528,6 +798,80 @@ pub enum FinalJamo {
     ///ㅎ
     H,
 }
+impl FinalJamo {
+    pub fn id(self) -> usize {
+        // 1-indexed since id is modelled after
+        // unicode block, where the 0-index refers
+        // to no final jamo.
+        self as usize - 0x11A8 + 1
+    }
+
+    pub fn all() -> Vec<FinalJamo> {
+        vec![
+            FinalJamo::G,
+            FinalJamo::Gg,
+            FinalJamo::Gs,
+            FinalJamo::N,
+            FinalJamo::Nc,
+            FinalJamo::Nch,
+            FinalJamo::D,
+            FinalJamo::R,
+            FinalJamo::Lg,
+            FinalJamo::Lm,
+            FinalJamo::Lb,
+            FinalJamo::Ls,
+            FinalJamo::Lt,
+            FinalJamo::Lph,
+            FinalJamo::Lh,
+            FinalJamo::M,
+            FinalJamo::B,
+            FinalJamo::Bs,
+            FinalJamo::S,
+            FinalJamo::Ss,
+            FinalJamo::Silent,
+            FinalJamo::J,
+            FinalJamo::Ch,
+            FinalJamo::K,
+            FinalJamo::T,
+            FinalJamo::P,
+            FinalJamo::H,
+        ]
+    }
+    pub fn append_possible(self) -> Vec<FinalJamo> {
+        match self {
+            FinalJamo::G => vec![FinalJamo::S],
+            FinalJamo::N => vec![FinalJamo::J, FinalJamo::H],
+            FinalJamo::R => vec![
+                FinalJamo::G,
+                FinalJamo::M,
+                FinalJamo::B,
+                FinalJamo::S,
+                FinalJamo::T,
+                FinalJamo::P,
+                FinalJamo::H,
+            ],
+            FinalJamo::B => vec![FinalJamo::S],
+            _ => vec![],
+        }
+    }
+
+    pub fn append(self, other: FinalJamo) -> JamoResult<Self> {
+        match (self, other) {
+            (FinalJamo::G, FinalJamo::S) => Ok(FinalJamo::Gs),
+            (FinalJamo::N, FinalJamo::J) => Ok(FinalJamo::Nc),
+            (FinalJamo::N, FinalJamo::H) => Ok(FinalJamo::Nch),
+            (FinalJamo::R, FinalJamo::G) => Ok(FinalJamo::Lg),
+            (FinalJamo::R, FinalJamo::M) => Ok(FinalJamo::Lm),
+            (FinalJamo::R, FinalJamo::B) => Ok(FinalJamo::Lb),
+            (FinalJamo::R, FinalJamo::S) => Ok(FinalJamo::Ls),
+            (FinalJamo::R, FinalJamo::T) => Ok(FinalJamo::Lt),
+            (FinalJamo::R, FinalJamo::P) => Ok(FinalJamo::Lph),
+            (FinalJamo::R, FinalJamo::H) => Ok(FinalJamo::Lh),
+            (FinalJamo::B, FinalJamo::S) => Ok(FinalJamo::Bs),
+            _ => Err(JamoError::IncompatibleCombine(self.into(), other.into())),
+        }
+    }
+}
 impl From<FinalJamo> for Jamo {
     fn from(value: FinalJamo) -> Self {
         match value {
@@ -559,6 +903,11 @@ impl From<FinalJamo> for Jamo {
             FinalJamo::P => Jamo::P,
             FinalJamo::H => Jamo::H,
         }
+    }
+}
+impl From<&FinalJamo> for Jamo {
+    fn from(value: &FinalJamo) -> Self {
+        Jamo::from(*value)
     }
 }
 impl TryFrom<Jamo> for FinalJamo {
@@ -652,5 +1001,7 @@ impl Display for FinalJamo {
 pub enum JamoError {
     #[error("Did not expect {0} <{0:?}>")]
     UnexpectedJamo(Jamo),
+    #[error("Cannot combine {0} <{0:?}> with {1} <{1:?}>")]
+    IncompatibleCombine(Jamo, Jamo),
 }
 pub type JamoResult<T> = Result<T, JamoError>;
