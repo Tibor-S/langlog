@@ -4,6 +4,7 @@ use crate::{
 };
 
 mod ext;
+mod hangul;
 mod jamo;
 mod syllable;
 
@@ -16,40 +17,38 @@ fn main() {
 
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::G).unwrap();
+    syllable.append(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::A).unwrap();
+    syllable.append(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::G).unwrap();
+    syllable.append(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
 
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::A).unwrap();
+    syllable.append(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::O).unwrap();
+    syllable.append(Jamo::O).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::G).unwrap();
+    syllable.append(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::S).unwrap();
+    syllable.append(Jamo::S).unwrap();
 
     log::debug!("Syllable: {}", syllable);
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::A).unwrap();
+    syllable.append(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable = syllable.append(Jamo::O).unwrap();
+    syllable.append(Jamo::O).unwrap();
     log::debug!("Syllable: {}", syllable);
-    match syllable.append(Jamo::O) {
-        Ok(v) => log::error!("Got {v:?}, should get an error!"),
-        Err(e) => log::debug!("Got error {e} as expected"),
-    };
+    let overflow = syllable.append(Jamo::O).unwrap().unwrap();
+    log::debug!("Syllables: {}{}", syllable, overflow);
 
-    log::debug!("Actual possible Jamo:");
+    log::debug!("possible Jamo:");
     for j in syllable.possible() {
         log::debug!("\t{j}");
     }
-    syllable = syllable.append(Jamo::R).unwrap();
+    syllable.append(Jamo::R).unwrap();
     log::debug!("Syllable: {}", syllable);
     log::debug!("Possible Jamo:");
     for j in syllable.possible() {

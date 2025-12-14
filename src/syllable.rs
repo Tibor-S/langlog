@@ -7,11 +7,11 @@ pub enum State {
     /// Next input must be initial or medial
     Start,
     /// Next input must be medial
-    Medial(InitialJamo),
+    Medial,
     /// Syllable could end here, or next input must be medial or final
-    Open(InitialJamo, MedialJamo),
+    Open,
     /// Syllable could end here or input must be final
-    OpenFinal(InitialJamo, MedialJamo, Option<FinalJamo>),
+    OpenFinal,
     /// Syllable must end here, cannot accept more inputs
     End,
 }
@@ -26,13 +26,13 @@ impl Syllable {
     pub fn state(self) -> State {
         match (self.initial, self.medial, self.finale) {
             (None, _, _) => State::Start,
-            (Some(i), None, _) => State::Medial(i),
-            (Some(i), Some(m), None) if !m.combine_possible().is_empty() => {
-                State::Open(i, m)
+            (Some(_), None, _) => State::Medial,
+            (Some(_), Some(m), None) if !m.combine_possible().is_empty() => {
+                State::Open
             }
-            (Some(i), Some(m), None) => State::OpenFinal(i, m, None),
-            (Some(i), Some(m), Some(f)) if !f.append_possible().is_empty() => {
-                State::OpenFinal(i, m, Some(f))
+            (Some(_), Some(_), None) => State::OpenFinal,
+            (Some(_), Some(_), Some(f)) if !f.append_possible().is_empty() => {
+                State::OpenFinal
             }
             _ => State::End,
         }
@@ -41,100 +41,152 @@ impl Syllable {
     pub fn possible(self) -> Vec<Jamo> {
         match self.state() {
             State::Start => Jamo::all_multi(true, true, false),
-            State::Medial(_) => Jamo::all_medial(),
-            State::Open(_, _) => Jamo::all_or_possible(
+            State::Medial => Jamo::all_medial(),
+            State::Open => Jamo::all_or_possible(
                 false,
                 (true, self.medial),
                 (true, self.finale),
             ),
-            State::OpenFinal(_, _, _) => {
+            State::OpenFinal => {
                 Jamo::all_or_possible(false, (false, None), (true, self.finale))
             }
             State::End => vec![],
         }
     }
 
-    pub fn append(self, jamo: Jamo) -> SyllableResult<Self> {
+    /// .
+    /// # Append
+    /// Appends `jamo` to syllable if applicable.
+    ///
+    /// ## Error free usage:
+    /// If `state` is `Start` (`Syllable::default()`):
+    /// - Appending `jamo` which is `Initial` or `Medial`
+    ///
+    /// If `state` is `Medial` (Syllable consists of an `Initial`):
+    /// - Appending `jamo` which is `Medial`
+    ///
+    /// If `state` is `Open` (Syllable consists of an `Initial` and a **single** `Medial`):
+    /// - Appending any `jamo` is fine, overflow will be returned
+    ///
+    /// If `state` is `OpenFinal` and syllable does not consist of any `Final` jamo:
+    /// - Appending any `jamo` is fine, overflow will be returned
+    ///
+    /// If `state` is `OpenFinal` but syllable consists of a **single** `Final` jamo:
+    /// - Appending any `Initial` or `Medial` will be returned in overflow
+    /// - Appending `Final` jamo which is compatible with current `Final`
+    ///
+    /// No matter the `state`:
+    /// - Appending `Jamo` returned by `.possible()`, will not result
+    /// in any errors or overflow.
+    ///
+    pub fn append(&mut self, jamo: Jamo) -> SyllableResult<Option<Syllable>> {
         match self.state() {
             State::Start => {
                 if let Ok(ij) = InitialJamo::try_from(jamo) {
-                    self.append_initial(ij)
+                    self.initial = Some(ij);
+                    Ok(None)
                 } else if let Ok(mj) = MedialJamo::try_from(jamo) {
-                    self.append_medial(mj)
+                    self.initial = Some(InitialJamo::Silent);
+                    self.medial = Some(mj);
+                    Ok(None)
                 } else {
-                    Err(SyllableError::UnexpectedJamo(jamo, State::Start))
+                    Err(SyllableError::ExpectedInitialOrMedial(jamo))
                 }
             }
-            State::Medial(i) => {
+            State::Medial => {
                 if let Ok(mj) = MedialJamo::try_from(jamo) {
-                    self.append_medial(mj)
+                    Ok(self.set_or_combine(mj))
                 } else {
-                    Err(SyllableError::UnexpectedJamo(jamo, State::Medial(i)))
+                    Err(SyllableError::ExpectedMedial(jamo))
                 }
             }
-            State::Open(i, m) => {
-                if let Ok(ij) = FinalJamo::try_from(jamo) {
-                    self.append_final(ij)
+            State::Open => {
+                if let Ok(mj) = MedialJamo::try_from(jamo) {
+                    Ok(self.set_or_combine(mj))
+                } else if let Ok(fj) = FinalJamo::try_from(jamo) {
+                    self.finale = Some(fj);
+                    Ok(None)
+                } else if let Ok(ij) = InitialJamo::try_from(jamo) {
+                    Ok(Some(ij.into()))
+                } else {
+                    panic!(
+                        "Critical logic error! Jamo could not be translated to `Initial`, `Medial` or `Final`"
+                    );
+                }
+            }
+            State::OpenFinal => {
+                if let Ok(fj) = FinalJamo::try_from(jamo) {
+                    self.set_or_append(fj)
+                } else if let Ok(ij) = InitialJamo::try_from(jamo) {
+                    Ok(Some(ij.into()))
                 } else if let Ok(mj) = MedialJamo::try_from(jamo) {
-                    self.append_medial(mj)
+                    Ok(Some(mj.into()))
                 } else {
-                    Err(SyllableError::UnexpectedJamo(jamo, State::Open(i, m)))
+                    panic!(
+                        "Critical logic error! Jamo could not be translated to `Initial`, `Medial` or `Final`"
+                    );
                 }
             }
-            State::OpenFinal(i, m, j) => {
-                if let Ok(ij) = FinalJamo::try_from(jamo) {
-                    self.append_final(ij)
+            State::End => {
+                if let Ok(ij) = InitialJamo::try_from(jamo) {
+                    Ok(Some(ij.into()))
+                } else if let Ok(mj) = MedialJamo::try_from(jamo) {
+                    Ok(Some(mj.into()))
                 } else {
-                    Err(SyllableError::UnexpectedJamo(
-                        jamo,
-                        State::OpenFinal(i, m, j),
-                    ))
+                    Err(SyllableError::ExpectedInitialOrMedial(jamo))
                 }
             }
-            State::End => Err(SyllableError::UnexpectedJamo(jamo, State::End)),
         }
     }
 
-    pub fn append_initial(self, jamo: InitialJamo) -> SyllableResult<Self> {
-        match self.state() {
-            State::Start => Ok(Self {
-                initial: Some(jamo),
-                ..self
-            }),
-            s => Err(SyllableError::UnexpectedInitial(jamo, s)),
+    fn set_or_combine(&mut self, medial: MedialJamo) -> Option<Syllable> {
+        match self.medial {
+            Some(mj) => match mj.combine(medial) {
+                Ok(nmj) => {
+                    self.medial = Some(nmj);
+                    None
+                }
+                Err(_) => Some(medial.into()),
+            },
+            None => {
+                self.medial = Some(medial);
+                None
+            }
         }
     }
 
-    pub fn append_medial(self, jamo: MedialJamo) -> SyllableResult<Self> {
-        match self.state() {
-            State::Start => Ok(Self {
-                initial: Some(InitialJamo::Silent),
-                medial: Some(jamo),
-                ..self
-            }),
-            State::Medial(_) => Ok(Self {
-                medial: Some(jamo),
-                ..self
-            }),
-            State::Open(_, mj) => Ok(Self {
-                medial: Some(mj.combine(jamo)?),
-                ..self
-            }),
-            s => Err(SyllableError::UnexpectedMedial(jamo, s)),
+    fn set_or_append(
+        &mut self,
+        finale: FinalJamo,
+    ) -> SyllableResult<Option<Syllable>> {
+        // Redundant option in return type to make impl in `append` seamless
+        // A new syllable cannot be created from a single final
+        match self.finale {
+            Some(fj) => {
+                self.finale = Some(fj.append(finale)?);
+                Ok(None)
+            }
+            None => {
+                self.finale = Some(finale);
+                Ok(None)
+            }
         }
     }
-
-    pub fn append_final(self, jamo: FinalJamo) -> SyllableResult<Self> {
-        match self.state() {
-            State::Open(_, _) | State::OpenFinal(_, _, None) => Ok(Self {
-                finale: Some(jamo),
-                ..self
-            }),
-            State::OpenFinal(_, _, Some(fj)) => Ok(Self {
-                finale: Some(fj.append(jamo)?),
-                ..self
-            }),
-            s => Err(SyllableError::UnexpectedFinal(jamo, s)),
+}
+impl From<InitialJamo> for Syllable {
+    fn from(value: InitialJamo) -> Self {
+        Self {
+            initial: Some(value),
+            ..Default::default()
+        }
+    }
+}
+impl From<MedialJamo> for Syllable {
+    fn from(value: MedialJamo) -> Self {
+        Self {
+            initial: Some(InitialJamo::Silent),
+            medial: Some(value),
+            ..Default::default()
         }
     }
 }
@@ -166,14 +218,10 @@ impl Display for Syllable {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyllableError {
-    #[error("Initial {0} <{0:?}> not expected in state {1:?}")]
-    UnexpectedInitial(InitialJamo, State),
-    #[error("Medial {0} <{0:?}> not expected in state {1:?}")]
-    UnexpectedMedial(MedialJamo, State),
-    #[error("Final {0} <{0:?}> not expected in state {1:?}")]
-    UnexpectedFinal(FinalJamo, State),
-    #[error("Jamo {0} <{0:?}> not expected in state {1:?}")]
-    UnexpectedJamo(Jamo, State),
+    #[error("Expected Initial or Medial got: Jamo {0} <{0:?}>")]
+    ExpectedInitialOrMedial(Jamo),
+    #[error("Expected Medial got: Jamo {0} <{0:?}>")]
+    ExpectedMedial(Jamo),
     #[error(transparent)]
     Jamo(#[from] JamoError),
 }
