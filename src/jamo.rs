@@ -653,6 +653,19 @@ impl MedialJamo {
             _ => Err(JamoError::IncompatibleCombine(self, other)),
         }
     }
+
+    pub fn components(self) -> (MedialJamo, Option<MedialJamo>) {
+        match self {
+            MedialJamo::Wa => (MedialJamo::O, Some(MedialJamo::A)),
+            MedialJamo::Wae => (MedialJamo::O, Some(MedialJamo::Ae)),
+            MedialJamo::Oe => (MedialJamo::O, Some(MedialJamo::I)),
+            MedialJamo::Wo => (MedialJamo::U, Some(MedialJamo::Eo)),
+            MedialJamo::We => (MedialJamo::U, Some(MedialJamo::E)),
+            MedialJamo::Wi => (MedialJamo::U, Some(MedialJamo::I)),
+            MedialJamo::Ui => (MedialJamo::Eu, Some(MedialJamo::I)),
+            mj => (mj, None),
+        }
+    }
 }
 impl From<MedialJamo> for Jamo {
     fn from(value: MedialJamo) -> Self {
@@ -894,6 +907,23 @@ impl FinalJamo {
             (FinalJamo::R, FinalJamo::H) => Ok(FinalJamo::Lh),
             (FinalJamo::B, FinalJamo::S) => Ok(FinalJamo::Bs),
             _ => Err(JamoError::IncompatibleAppend(self, other)),
+        }
+    }
+
+    pub fn components(self) -> (FinalJamo, Option<FinalJamo>) {
+        match self {
+            FinalJamo::Gs => (FinalJamo::G, Some(FinalJamo::S)),
+            FinalJamo::Nc => (FinalJamo::N, Some(FinalJamo::J)),
+            FinalJamo::Nch => (FinalJamo::N, Some(FinalJamo::H)),
+            FinalJamo::Lg => (FinalJamo::R, Some(FinalJamo::G)),
+            FinalJamo::Lm => (FinalJamo::R, Some(FinalJamo::M)),
+            FinalJamo::Lb => (FinalJamo::R, Some(FinalJamo::B)),
+            FinalJamo::Ls => (FinalJamo::R, Some(FinalJamo::S)),
+            FinalJamo::Lt => (FinalJamo::R, Some(FinalJamo::T)),
+            FinalJamo::Lph => (FinalJamo::R, Some(FinalJamo::P)),
+            FinalJamo::Lh => (FinalJamo::R, Some(FinalJamo::H)),
+            FinalJamo::Bs => (FinalJamo::B, Some(FinalJamo::S)),
+            fj => (fj, None),
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::{
+    hangul::Hangul,
     jamo::{FinalJamo, InitialJamo, Jamo, MedialJamo},
     syllable::Syllable,
 };
@@ -17,41 +18,96 @@ fn main() {
 
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::G).unwrap();
+    syllable.push(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::A).unwrap();
+    syllable.push(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::G).unwrap();
+    syllable.push(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
 
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::A).unwrap();
+    syllable.push(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::O).unwrap();
+    syllable.push(Jamo::O).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::G).unwrap();
+    syllable.push(Jamo::G).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::S).unwrap();
+    syllable.push(Jamo::S).unwrap();
 
     log::debug!("Syllable: {}", syllable);
     let mut syllable = Syllable::default();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::A).unwrap();
+    syllable.push(Jamo::A).unwrap();
     log::debug!("Syllable: {}", syllable);
-    syllable.append(Jamo::O).unwrap();
+    syllable.push(Jamo::O).unwrap();
     log::debug!("Syllable: {}", syllable);
-    let overflow = syllable.append(Jamo::O).unwrap().unwrap();
+    let overflow = syllable.push(Jamo::O).unwrap().unwrap();
     log::debug!("Syllables: {}{}", syllable, overflow);
 
     log::debug!("possible Jamo:");
     for j in syllable.possible() {
         log::debug!("\t{j}");
     }
-    syllable.append(Jamo::R).unwrap();
+    syllable.push(Jamo::R).unwrap();
     log::debug!("Syllable: {}", syllable);
     log::debug!("Possible Jamo:");
     for j in syllable.possible() {
         log::debug!("\t{j}");
     }
+
+    let mut str = Hangul::default();
+    str.push_back(Jamo::G).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::Ae).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::Ya).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::B).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::Gg).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::I).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::O).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::M).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::D).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::Ae).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::R).unwrap();
+    log::debug!("Hangul: {str}");
+    str.push_back(Jamo::S).unwrap();
+    log::debug!("Hangul: {str}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+    let popped = str.pop_back().unwrap();
+    log::debug!("Hangul: {str}\tpopped:{popped}");
+
+    let js = vec![
+        Jamo::G,
+        Jamo::Ae,
+        Jamo::Ya,
+        Jamo::B,
+        Jamo::Gg,
+        Jamo::I,
+        Jamo::O,
+        Jamo::M,
+        Jamo::D,
+        Jamo::Ae,
+        Jamo::R,
+        Jamo::S,
+    ];
+    let str = Hangul::try_from(js).unwrap();
+    log::debug!("Hangul: {str}");
 }

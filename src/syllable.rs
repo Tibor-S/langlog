@@ -55,7 +55,7 @@ impl Syllable {
     }
 
     /// .
-    /// # Append
+    /// # Push
     /// Appends `jamo` to syllable if applicable.
     ///
     /// ## Error free usage:
@@ -79,7 +79,7 @@ impl Syllable {
     /// - Appending `Jamo` returned by `.possible()`, will not result
     /// in any errors or overflow.
     ///
-    pub fn append(&mut self, jamo: Jamo) -> SyllableResult<Option<Syllable>> {
+    pub fn push(&mut self, jamo: Jamo) -> SyllableResult<Option<Syllable>> {
         match self.state() {
             State::Start => {
                 if let Ok(ij) = InitialJamo::try_from(jamo) {
@@ -139,6 +139,37 @@ impl Syllable {
         }
     }
 
+    pub fn pop(&mut self) -> Option<Jamo> {
+        if let Some(fj) = self.finale {
+            match fj.components() {
+                (n1, None) => {
+                    self.finale = None;
+                    Some(n1.into())
+                }
+                (n1, Some(n2)) => {
+                    self.finale = Some(n1);
+                    Some(n2.into())
+                }
+            }
+        } else if let Some(mj) = self.medial {
+            match mj.components() {
+                (n1, None) => {
+                    self.medial = None;
+                    Some(n1.into())
+                }
+                (n1, Some(n2)) => {
+                    self.medial = Some(n1);
+                    Some(n2.into())
+                }
+            }
+        } else if let Some(ij) = self.initial {
+            self.initial = None;
+            Some(ij.into())
+        } else {
+            None
+        }
+    }
+
     fn set_or_combine(&mut self, medial: MedialJamo) -> Option<Syllable> {
         match self.medial {
             Some(mj) => match mj.combine(medial) {
@@ -178,6 +209,10 @@ impl Syllable {
                 Ok(None)
             }
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.initial.is_none()
     }
 }
 impl From<InitialJamo> for Syllable {
