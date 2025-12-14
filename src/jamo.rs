@@ -625,7 +625,7 @@ impl MedialJamo {
             (MedialJamo::U, MedialJamo::E) => Ok(MedialJamo::We),
             (MedialJamo::U, MedialJamo::I) => Ok(MedialJamo::Wi),
             (MedialJamo::Eu, MedialJamo::I) => Ok(MedialJamo::Ui),
-            _ => Err(JamoError::IncompatibleCombine(self.into(), other.into())),
+            _ => Err(JamoError::IncompatibleCombine(self, other)),
         }
     }
 }
@@ -868,7 +868,7 @@ impl FinalJamo {
             (FinalJamo::R, FinalJamo::P) => Ok(FinalJamo::Lph),
             (FinalJamo::R, FinalJamo::H) => Ok(FinalJamo::Lh),
             (FinalJamo::B, FinalJamo::S) => Ok(FinalJamo::Bs),
-            _ => Err(JamoError::IncompatibleCombine(self.into(), other.into())),
+            _ => Err(JamoError::IncompatibleAppend(self, other)),
         }
     }
 }
@@ -1002,6 +1002,8 @@ pub enum JamoError {
     #[error("Did not expect {0} <{0:?}>")]
     UnexpectedJamo(Jamo),
     #[error("Cannot combine {0} <{0:?}> with {1} <{1:?}>")]
-    IncompatibleCombine(Jamo, Jamo),
+    IncompatibleCombine(MedialJamo, MedialJamo),
+    #[error("Cannot follow {0} <{0:?}> with {1} <{1:?}>")]
+    IncompatibleAppend(FinalJamo, FinalJamo),
 }
 pub type JamoResult<T> = Result<T, JamoError>;
