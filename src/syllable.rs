@@ -159,13 +159,20 @@ impl Syllable {
         &mut self,
         finale: FinalJamo,
     ) -> SyllableResult<Option<Syllable>> {
-        // Redundant option in return type to make impl in `append` seamless
-        // A new syllable cannot be created from a single final
         match self.finale {
-            Some(fj) => {
-                self.finale = Some(fj.append(finale)?);
-                Ok(None)
-            }
+            Some(fj) => match fj.append(finale) {
+                Ok(nfj) => {
+                    self.finale = Some(nfj);
+                    Ok(None)
+                }
+                Err(e) => {
+                    if let Ok(ij) = InitialJamo::try_from(finale) {
+                        Ok(Some(ij.into()))
+                    } else {
+                        Err(e)?
+                    }
+                }
+            },
             None => {
                 self.finale = Some(finale);
                 Ok(None)

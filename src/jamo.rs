@@ -437,6 +437,31 @@ impl TryFrom<Jamo> for InitialJamo {
         }
     }
 }
+impl TryFrom<FinalJamo> for InitialJamo {
+    type Error = JamoError;
+
+    fn try_from(value: FinalJamo) -> JamoResult<InitialJamo> {
+        match value {
+            FinalJamo::G => Ok(InitialJamo::G),
+            FinalJamo::Gg => Ok(InitialJamo::Gg),
+            FinalJamo::N => Ok(InitialJamo::N),
+            FinalJamo::D => Ok(InitialJamo::D),
+            FinalJamo::R => Ok(InitialJamo::R),
+            FinalJamo::M => Ok(InitialJamo::M),
+            FinalJamo::B => Ok(InitialJamo::B),
+            FinalJamo::S => Ok(InitialJamo::S),
+            FinalJamo::Ss => Ok(InitialJamo::Ss),
+            FinalJamo::Silent => Ok(InitialJamo::Silent),
+            FinalJamo::J => Ok(InitialJamo::J),
+            FinalJamo::Ch => Ok(InitialJamo::Ch),
+            FinalJamo::K => Ok(InitialJamo::K),
+            FinalJamo::T => Ok(InitialJamo::T),
+            FinalJamo::P => Ok(InitialJamo::P),
+            FinalJamo::H => Ok(InitialJamo::H),
+            _ => Err(JamoError::UnexpectedJamo(value.into())),
+        }
+    }
+}
 impl From<InitialJamo> for char {
     fn from(value: InitialJamo) -> Self {
         // Safe ! all variants of jamo have valid unicode values
@@ -943,6 +968,31 @@ impl TryFrom<Jamo> for FinalJamo {
             Jamo::P => Ok(FinalJamo::P),
             Jamo::H => Ok(FinalJamo::H),
             _ => Err(JamoError::UnexpectedJamo(value)),
+        }
+    }
+}
+impl TryFrom<InitialJamo> for FinalJamo {
+    type Error = JamoError;
+
+    fn try_from(value: InitialJamo) -> JamoResult<FinalJamo> {
+        match value {
+            InitialJamo::G => Ok(FinalJamo::G),
+            InitialJamo::Gg => Ok(FinalJamo::Gg),
+            InitialJamo::N => Ok(FinalJamo::N),
+            InitialJamo::D => Ok(FinalJamo::D),
+            InitialJamo::R => Ok(FinalJamo::R),
+            InitialJamo::M => Ok(FinalJamo::M),
+            InitialJamo::B => Ok(FinalJamo::B),
+            InitialJamo::S => Ok(FinalJamo::S),
+            InitialJamo::Ss => Ok(FinalJamo::Ss),
+            InitialJamo::Silent => Ok(FinalJamo::Silent),
+            InitialJamo::J => Ok(FinalJamo::J),
+            InitialJamo::Ch => Ok(FinalJamo::Ch),
+            InitialJamo::K => Ok(FinalJamo::K),
+            InitialJamo::T => Ok(FinalJamo::T),
+            InitialJamo::P => Ok(FinalJamo::P),
+            InitialJamo::H => Ok(FinalJamo::H),
+            _ => Err(JamoError::UnexpectedJamo(value.into())),
         }
     }
 }
