@@ -1,14 +1,14 @@
 use crate::{
     hangul::Hangul,
+    hangul_parser::HangulParser,
     jamo::{FinalJamo, InitialJamo, Jamo, MedialJamo},
-    parser::Parser,
     syllable::Syllable,
 };
 
 mod ext;
 mod hangul;
+mod hangul_parser;
 mod jamo;
-mod parser;
 mod syllable;
 
 fn main() {
@@ -114,7 +114,7 @@ fn main() {
     log::debug!("Hangul: {str}");
 
     let mut hangul = Hangul::default();
-    let parser = Parser::new();
+    let parser = HangulParser::new();
     let rr = parser.parse_token(&mut hangul, "ggwae").unwrap();
     log::debug!("{hangul}\t{rr}");
     let rr = parser.parse_token(&mut hangul, rr).unwrap();

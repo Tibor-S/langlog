@@ -4,8 +4,8 @@ use crate::{
     jamo::Jamo,
 };
 
-pub struct Parser(Tree<char, Jamo>);
-impl Parser {
+pub struct HangulParser(Tree<char, Jamo>);
+impl HangulParser {
     pub fn new() -> Self {
         let mut tree = Tree::<char, Jamo>::default();
         tree.insert_str("g", Jamo::G);
