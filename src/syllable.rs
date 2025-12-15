@@ -232,6 +232,15 @@ impl From<MedialJamo> for Syllable {
         }
     }
 }
+impl TryFrom<Jamo> for Syllable {
+    type Error = SyllableError;
+
+    fn try_from(value: Jamo) -> SyllableResult<Self> {
+        let mut syl = Self::default();
+        syl.push(value)?;
+        Ok(syl)
+    }
+}
 impl Display for Syllable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(ij) = self.initial

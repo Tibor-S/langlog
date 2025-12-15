@@ -43,6 +43,11 @@ impl Hangul {
             None => None,
         }
     }
+
+    pub fn break_with(&mut self, jamo: Jamo) -> HangulResult<()> {
+        self.push(jamo.try_into()?);
+        Ok(())
+    }
 }
 impl Deref for Hangul {
     type Target = Vec<Syllable>;

@@ -1,12 +1,14 @@
 use crate::{
     hangul::Hangul,
     jamo::{FinalJamo, InitialJamo, Jamo, MedialJamo},
+    parser::Parser,
     syllable::Syllable,
 };
 
 mod ext;
 mod hangul;
 mod jamo;
+mod parser;
 mod syllable;
 
 fn main() {
@@ -110,4 +112,23 @@ fn main() {
     ];
     let str = Hangul::try_from(js).unwrap();
     log::debug!("Hangul: {str}");
+
+    let mut hangul = Hangul::default();
+    let parser = Parser::new();
+    let rr = parser.parse_token(&mut hangul, "ggwae").unwrap();
+    log::debug!("{hangul}\t{rr}");
+    let rr = parser.parse_token(&mut hangul, rr).unwrap();
+    log::debug!("{hangul}\t{rr}");
+
+    log::debug!("With prefix \"e\"");
+    for j in parser.with_prefix("e") {
+        log::debug!("\t{j}")
+    }
+
+    let mut hangul = Hangul::default();
+    let rr = parser.parse(&mut hangul, "gyaeonhrui").unwrap();
+    log::debug!("{hangul}\t{rr}");
+    let mut hangul = Hangul::default();
+    let rr = parser.parse(&mut hangul, "gyaed-danjja").unwrap();
+    log::debug!("{hangul}\t{rr}");
 }
