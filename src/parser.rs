@@ -8,57 +8,57 @@ pub struct Parser(Tree<char, Jamo>);
 impl Parser {
     pub fn new() -> Self {
         let mut tree = Tree::<char, Jamo>::default();
-        Self::tree_insert(&mut tree, "g", Jamo::G);
-        Self::tree_insert(&mut tree, "gg", Jamo::Gg);
-        Self::tree_insert(&mut tree, "gs", Jamo::Gs);
-        Self::tree_insert(&mut tree, "n", Jamo::N);
-        Self::tree_insert(&mut tree, "nc", Jamo::Nc);
-        Self::tree_insert(&mut tree, "nch", Jamo::Nch);
-        Self::tree_insert(&mut tree, "d", Jamo::D);
-        Self::tree_insert(&mut tree, "dd", Jamo::Dd);
-        Self::tree_insert(&mut tree, "r", Jamo::R);
-        Self::tree_insert(&mut tree, "lg", Jamo::Lg);
-        Self::tree_insert(&mut tree, "lm", Jamo::Lm);
-        Self::tree_insert(&mut tree, "lb", Jamo::Lb);
-        Self::tree_insert(&mut tree, "ls", Jamo::Ls);
-        Self::tree_insert(&mut tree, "lt", Jamo::Lt);
-        Self::tree_insert(&mut tree, "lph", Jamo::Lph);
-        Self::tree_insert(&mut tree, "lh", Jamo::Lh);
-        Self::tree_insert(&mut tree, "m", Jamo::M);
-        Self::tree_insert(&mut tree, "b", Jamo::B);
-        Self::tree_insert(&mut tree, "bb", Jamo::Bb);
-        Self::tree_insert(&mut tree, "bs", Jamo::Bs);
-        Self::tree_insert(&mut tree, "s", Jamo::S);
-        Self::tree_insert(&mut tree, "ss", Jamo::Ss);
-        Self::tree_insert(&mut tree, "ng", Jamo::Silent);
-        Self::tree_insert(&mut tree, "j", Jamo::J);
-        Self::tree_insert(&mut tree, "jj", Jamo::Jj);
-        Self::tree_insert(&mut tree, "ch", Jamo::Ch);
-        Self::tree_insert(&mut tree, "k", Jamo::K);
-        Self::tree_insert(&mut tree, "t", Jamo::T);
-        Self::tree_insert(&mut tree, "p", Jamo::P);
-        Self::tree_insert(&mut tree, "h", Jamo::H);
-        Self::tree_insert(&mut tree, "a", Jamo::A);
-        Self::tree_insert(&mut tree, "ae", Jamo::Ae);
-        Self::tree_insert(&mut tree, "ya", Jamo::Ya);
-        Self::tree_insert(&mut tree, "yae", Jamo::Yae);
-        Self::tree_insert(&mut tree, "eo", Jamo::Eo);
-        Self::tree_insert(&mut tree, "e", Jamo::E);
-        Self::tree_insert(&mut tree, "yeo", Jamo::Yeo);
-        Self::tree_insert(&mut tree, "ye", Jamo::Ye);
-        Self::tree_insert(&mut tree, "o", Jamo::O);
-        Self::tree_insert(&mut tree, "wa", Jamo::Wa);
-        Self::tree_insert(&mut tree, "wae", Jamo::Wae);
-        Self::tree_insert(&mut tree, "oe", Jamo::Oe);
-        Self::tree_insert(&mut tree, "yo", Jamo::Yo);
-        Self::tree_insert(&mut tree, "u", Jamo::U);
-        Self::tree_insert(&mut tree, "wo", Jamo::Wo);
-        Self::tree_insert(&mut tree, "we", Jamo::We);
-        Self::tree_insert(&mut tree, "wi", Jamo::Wi);
-        Self::tree_insert(&mut tree, "yu", Jamo::Yu);
-        Self::tree_insert(&mut tree, "eu", Jamo::Eu);
-        Self::tree_insert(&mut tree, "ui", Jamo::Ui);
-        Self::tree_insert(&mut tree, "i", Jamo::I);
+        tree.insert_str("g", Jamo::G);
+        tree.insert_str("gg", Jamo::Gg);
+        tree.insert_str("gs", Jamo::Gs);
+        tree.insert_str("n", Jamo::N);
+        tree.insert_str("nc", Jamo::Nc);
+        tree.insert_str("nch", Jamo::Nch);
+        tree.insert_str("d", Jamo::D);
+        tree.insert_str("dd", Jamo::Dd);
+        tree.insert_str("r", Jamo::R);
+        tree.insert_str("lg", Jamo::Lg);
+        tree.insert_str("lm", Jamo::Lm);
+        tree.insert_str("lb", Jamo::Lb);
+        tree.insert_str("ls", Jamo::Ls);
+        tree.insert_str("lt", Jamo::Lt);
+        tree.insert_str("lph", Jamo::Lph);
+        tree.insert_str("lh", Jamo::Lh);
+        tree.insert_str("m", Jamo::M);
+        tree.insert_str("b", Jamo::B);
+        tree.insert_str("bb", Jamo::Bb);
+        tree.insert_str("bs", Jamo::Bs);
+        tree.insert_str("s", Jamo::S);
+        tree.insert_str("ss", Jamo::Ss);
+        tree.insert_str("ng", Jamo::Silent);
+        tree.insert_str("j", Jamo::J);
+        tree.insert_str("jj", Jamo::Jj);
+        tree.insert_str("ch", Jamo::Ch);
+        tree.insert_str("k", Jamo::K);
+        tree.insert_str("t", Jamo::T);
+        tree.insert_str("p", Jamo::P);
+        tree.insert_str("h", Jamo::H);
+        tree.insert_str("a", Jamo::A);
+        tree.insert_str("ae", Jamo::Ae);
+        tree.insert_str("ya", Jamo::Ya);
+        tree.insert_str("yae", Jamo::Yae);
+        tree.insert_str("eo", Jamo::Eo);
+        tree.insert_str("e", Jamo::E);
+        tree.insert_str("yeo", Jamo::Yeo);
+        tree.insert_str("ye", Jamo::Ye);
+        tree.insert_str("o", Jamo::O);
+        tree.insert_str("wa", Jamo::Wa);
+        tree.insert_str("wae", Jamo::Wae);
+        tree.insert_str("oe", Jamo::Oe);
+        tree.insert_str("yo", Jamo::Yo);
+        tree.insert_str("u", Jamo::U);
+        tree.insert_str("wo", Jamo::Wo);
+        tree.insert_str("we", Jamo::We);
+        tree.insert_str("wi", Jamo::Wi);
+        tree.insert_str("yu", Jamo::Yu);
+        tree.insert_str("eu", Jamo::Eu);
+        tree.insert_str("ui", Jamo::Ui);
+        tree.insert_str("i", Jamo::I);
         Self(tree)
     }
 
@@ -98,7 +98,7 @@ impl Parser {
                 .unwrap_or(input.len());
             let (s, ret) = input.split_at(end);
 
-            match self.get(s) {
+            match self.0.get_str(s) {
                 Some(j) => {
                     if is_break {
                         hangul.break_with(j)?;
@@ -114,27 +114,6 @@ impl Parser {
     }
 
     pub fn with_prefix(&self, token: &str) -> Vec<Jamo> {
-        let tree = &self.0;
-        let temp = token.chars().collect::<Vec<_>>();
-        let key = &mut temp.iter();
-        let sub = match tree.get_tree(key) {
-            Some(t) => t,
-            None => return vec![],
-        };
-
-        sub.all().iter().map(|j| **j).collect()
-    }
-
-    fn get(&self, token: &str) -> Option<Jamo> {
-        let tree = &self.0;
-        let temp = token.chars().collect::<Vec<_>>();
-        let key = &mut temp.iter();
-        tree.get(key).cloned()
-    }
-
-    fn tree_insert(tree: &mut Tree<char, Jamo>, token: &str, value: Jamo) {
-        let temp = token.chars().collect::<Vec<_>>();
-        let key = &mut temp.iter();
-        tree.insert(key, value);
+        self.0.with_prefix(token)
     }
 }

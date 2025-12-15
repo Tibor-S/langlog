@@ -73,6 +73,30 @@ where
         ret
     }
 }
+impl<V: Clone> Tree<char, V> {
+    pub fn with_prefix(&self, token: &str) -> Vec<V> {
+        let temp = token.chars().collect::<Vec<_>>();
+        let key = &mut temp.iter();
+        let sub = match self.get_tree(key) {
+            Some(t) => t,
+            None => return vec![],
+        };
+
+        sub.all().iter().map(|j| (*j).clone()).collect()
+    }
+
+    pub fn get_str(&self, token: &str) -> Option<V> {
+        let temp = token.chars().collect::<Vec<_>>();
+        let key = &mut temp.iter();
+        self.get(key).cloned()
+    }
+
+    pub fn insert_str(&mut self, token: &str, value: V) {
+        let temp = token.chars().collect::<Vec<_>>();
+        let key = &mut temp.iter();
+        self.insert(key, value);
+    }
+}
 impl<K, V> Default for Tree<K, V> {
     fn default() -> Self {
         Self {
