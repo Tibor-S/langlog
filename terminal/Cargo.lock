@@ -137,16 +137,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "langlog"
-version = "0.1.0"
-dependencies = [
- "log",
- "pretty_env_logger",
- "terminal",
- "thiserror",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
