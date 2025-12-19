@@ -1,8 +1,9 @@
 mod ext;
 
 use std::{
-    fmt::Display,
+    fmt::{self, Display},
     io::{self, Stdout, Write},
+    marker::PhantomData,
     ops::Range,
 };
 
@@ -22,12 +23,14 @@ pub trait Block {
 }
 
 pub trait Input {
-    type Value;
-
     fn feed(&mut self, key: KeyEvent) -> Option<KeyEvent>;
     /// None if cursor is not shown
     fn rel_cursor_pos(&self) -> Option<(u16, u16)>;
-    fn value(&self) -> &Self::Value;
+    fn input_pos(&self) -> (u16, u16);
+    /// Called when element is focused
+    fn focus(&mut self) {}
+    /// Called when element is unfocused
+    fn unfocus(&mut self) {}
 }
 
 #[derive(Debug, Default, Clone)]
@@ -116,8 +119,6 @@ impl Block for TextInput {
 }
 
 impl Input for TextInput {
-    type Value = String;
-
     fn feed(&mut self, key: KeyEvent) -> Option<KeyEvent> {
         match key {
             KeyEvent {
@@ -167,8 +168,8 @@ impl Input for TextInput {
         }
     }
 
-    fn value(&self) -> &Self::Value {
-        &self.value
+    fn input_pos(&self) -> (u16, u16) {
+        self.pos()
     }
 
     fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
@@ -199,15 +200,49 @@ impl Border {
     }
 }
 
-#[derive(Debug)]
 pub struct Terminal {
     stdout: Stdout,
+    inputs: Vec<Box<dyn Input>>,
+    focused: Option<usize>,
 }
 impl Terminal {
     pub fn new() -> Self {
         Self {
             stdout: io::stdout(),
+            inputs: vec![],
+            focused: None,
         }
+    }
+
+    pub fn add_input<I: Input + 'static>(&mut self, input: I) {
+        let boxed: Box<dyn Input> = Box::new(input);
+        let (bx, by) = boxed.input_pos();
+        let index = self.inputs.binary_search_by(|inp| {
+            let (x, y) = inp.input_pos();
+            match y.cmp(&by) {
+                std::cmp::Ordering::Equal => x.cmp(&bx),
+                ord => ord,
+            }
+        });
+        match index {
+            Ok(i) => self.inputs[i] = boxed,
+            Err(i) => self.inputs.insert(i, boxed),
+        }
+    }
+
+    pub fn rem_input(&mut self, pos: (u16, u16)) -> Option<Box<dyn Input>> {
+        let index = self.inputs.binary_search_by(|inp| {
+            let (x, y) = inp.input_pos();
+            match y.cmp(&pos.1) {
+                std::cmp::Ordering::Equal => x.cmp(&pos.1),
+                ord => ord,
+            }
+        });
+        let index = match index {
+            Ok(i) => i,
+            Err(_) => return None,
+        };
+        Some(self.inputs.remove(index))
     }
 
     pub fn run(&mut self) -> TerminalResult<()> {
@@ -293,6 +328,13 @@ impl Terminal {
                 return Ok(event);
             }
         }
+    }
+}
+impl fmt::Debug for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Terminal")
+            .field("stdout", &self.stdout)
+            .finish()
     }
 }
 

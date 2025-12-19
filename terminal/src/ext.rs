@@ -1,4 +1,4 @@
-use std::{isize, ops::Range};
+use std::{isize, marker::PhantomData, ops::Range};
 
 /// # Range with mid
 /// ```
