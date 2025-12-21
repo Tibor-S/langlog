@@ -1,4 +1,4 @@
-use std::{isize, marker::PhantomData, ops::Range};
+use std::{cmp::Ordering, isize, ops::Range};
 
 /// # Range with mid
 /// ```
@@ -48,4 +48,62 @@ pub fn lt_iu(lhs: isize, rhs: usize) -> bool {
 }
 pub fn gt_iu(lhs: isize, rhs: usize) -> bool {
     (isize::MAX as usize).cmp(&rhs).is_gt() && lhs > rhs as isize
+}
+
+/// Returns the first index `i` where `comp(value, &vec\[i\]) == Ordering::Less`
+///
+/// If no such index exists then `vec.len()` is returned
+///
+/// https://en.cppreference.com/w/cpp/algorithm/upper_bound.html
+pub fn upper_bound<T, V, F>(vec: &Vec<T>, value: &V, comp: F) -> usize
+where
+    F: Fn(&V, &T) -> Ordering,
+{
+    let mut first = 0;
+    let last = vec.len();
+    let mut count = last - first;
+    let mut i;
+    let mut step: usize;
+
+    while count > 0 {
+        i = first;
+        step = count / 2;
+        i += step;
+
+        if comp(value, &vec[i]) != Ordering::Less {
+            i += 1;
+            first = i;
+            count -= step + 1;
+        } else {
+            count = step;
+        }
+    }
+    return first;
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ext::upper_bound;
+
+    #[test]
+    fn test_upper_bound() {
+        //           0  1  2  3  4  5  6  7  8  9   10  11   12   13
+        let v = vec![1, 2, 3, 3, 3, 3, 4, 5, 9, 10, 23, 543, 611];
+        assert_eq!(
+            upper_bound(&v, &0usize, |val: &usize, el: &usize| val.cmp(el)),
+            0usize
+        );
+        assert_eq!(
+            upper_bound(&v, &3usize, |val: &usize, el: &usize| val.cmp(el)),
+            6usize
+        );
+        assert_eq!(
+            upper_bound(&v, &10usize, |val: &usize, el: &usize| val.cmp(el)),
+            10usize
+        );
+        assert_eq!(
+            upper_bound(&v, &611usize, |val: &usize, el: &usize| val.cmp(el)),
+            v.len()
+        );
+    }
 }

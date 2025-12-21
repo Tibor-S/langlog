@@ -1,10 +1,15 @@
+pub mod code;
+pub mod elements;
 mod ext;
+pub mod traits;
 
 use std::{
-    fmt::{self, Display},
+    cmp::Ordering,
+    collections::HashMap,
+    fmt::{self},
     io::{self, Stdout, Write},
-    marker::PhantomData,
-    ops::Range,
+    rc::Rc,
+    sync::RwLock,
 };
 
 use crossterm::{
@@ -13,242 +18,64 @@ use crossterm::{
     queue, style, terminal,
 };
 
-use crate::ext::{range_with_mid, saturate_range};
+use crate::{
+    code::TerminalCode,
+    ext::upper_bound,
+    traits::{Block, Input},
+};
 
-pub trait Block {
-    type Line: Display;
-
-    fn pos(&self) -> (u16, u16);
-    fn rel_line(&self, i: u16) -> Option<Self::Line>;
-}
-
-pub trait Input {
-    fn feed(&mut self, key: KeyEvent) -> Option<KeyEvent>;
-    /// None if cursor is not shown
-    fn rel_cursor_pos(&self) -> Option<(u16, u16)>;
-    fn input_pos(&self) -> (u16, u16);
-    /// Called when element is focused
-    fn focus(&mut self) {}
-    /// Called when element is unfocused
-    fn unfocus(&mut self) {}
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct TextInput {
-    pos: (u16, u16),
-    display_width: u16,
-    index: u16,
-    value: String,
-}
-
-impl TextInput {
-    pub fn with_pos(self, x: u16, y: u16) -> Self {
-        Self {
-            pos: (x, y),
-            ..self
+macro_rules! ctrl {
+    ($c:expr) => {
+        KeyEvent {
+            code: KeyCode::Char($c),
+            modifiers: KeyModifiers::CONTROL,
+            ..
         }
-    }
-
-    pub fn with_width(self, width: u16) -> Self {
-        Self {
-            display_width: width,
-            ..self
-        }
-    }
-
-    pub fn display_range(&self) -> Range<usize> {
-        let len = self.len().min(self.display_width);
-        saturate_range(
-            range_with_mid(self.index as isize, len as isize),
-            0..self.len() as usize,
-        )
-    }
-
-    pub fn len(&self) -> u16 {
-        self.value.chars().count() as u16
-    }
+    };
 }
-
-impl Block for TextInput {
-    type Line = String;
-
-    fn pos(&self) -> (u16, u16) {
-        self.pos
-    }
-
-    fn rel_line(&self, i: u16) -> Option<Self::Line> {
-        if i != 0 {
-            return None;
+macro_rules! up {
+    () => {
+        KeyEvent {
+            code: KeyCode::Up,
+            kind: KeyEventKind::Press,
+            ..
         }
-        /* EX:
-         * display_width == 16
-         * len() == 24 && value = "abcdefghijklmnopqrstuvwx"
-         *                               0123456789ABCDEFGHIJKLMN
-         * self.index = 3
-         * "abcdefghijklmno…"
-         *     ^
-         * self.index = 12
-         * "…ghijklmnopqrst…"
-         *         ^
-         * self.index = 17
-         * "…jklmnopqrstuvwx"
-         *           ^
-         */
-        let mut display_range = self.display_range();
-        if self.len() <= self.display_width {
-            Some(self.value.clone())
-        } else if display_range.start == 0 {
-            display_range.end -= 1;
-            let mut ret = String::from(&self.value[display_range]);
-            ret.push('…');
-            Some(ret)
-        } else if display_range.end == self.len() as usize {
-            display_range.start += 1;
-            let mut ret = String::from('…');
-            ret.extend(self.value[display_range].chars());
-            Some(ret)
-        } else {
-            display_range.start += 1;
-            display_range.end -= 1;
-            let mut ret = String::from('…');
-            ret.extend(self.value[display_range].chars());
-            ret.push('…');
-            Some(ret)
-        }
-    }
+    };
 }
-
-impl Input for TextInput {
-    fn feed(&mut self, key: KeyEvent) -> Option<KeyEvent> {
-        match key {
-            KeyEvent {
-                code: KeyCode::Char(c),
-                kind: KeyEventKind::Press,
-                modifiers,
-                ..
-            } if modifiers != KeyModifiers::CONTROL => {
-                self.value.insert(self.index as usize, c);
-                self.index += 1;
-                None
-            }
-            KeyEvent {
-                code: KeyCode::Left,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                ..
-            } => {
-                self.index = self.index.saturating_sub_signed(1);
-                None
-            }
-            KeyEvent {
-                code: KeyCode::Right,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                ..
-            } => {
-                self.index += 1;
-                self.index = self.index.min(self.len());
-                None
-            }
-            KeyEvent {
-                code: KeyCode::Backspace,
-                modifiers: KeyModifiers::NONE,
-                kind: KeyEventKind::Press,
-                ..
-            } => {
-                if self.len() == 0 {
-                    Some(key)
-                } else {
-                    self.index -= 1;
-                    self.value.remove(self.index as usize);
-                    None
-                }
-            }
-            _ => Some(key),
+macro_rules! down {
+    () => {
+        KeyEvent {
+            code: KeyCode::Down,
+            kind: KeyEventKind::Press,
+            ..
         }
-    }
-
-    fn input_pos(&self) -> (u16, u16) {
-        self.pos()
-    }
-
-    fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
-        self.display_range()
-            .chain(Some(self.len() as usize))
-            .enumerate()
-            .find(|(_, el)| *el == self.index as usize)
-            .map(|(i, _)| (i as u16, 0))
-    }
-}
-
-const END: usize = 18 * 2 + 1;
-pub struct Border {}
-impl Border {
-    const LINES: [&'static str; 2] = [
-        //   1    2    3    4    5    6    7    8    9    10   11   12   13   14   15   16   17   18   19   20
-        "+――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――+",
-        "|                                                                                                  |",
-    ];
-    const TOP_BOTTOM: &str = Self::LINES[0];
-    const PIPE_ROW: &str = Self::LINES[1];
-    fn line(i: usize) -> &'static str {
-        const LAST: usize = END - 1;
-        match i {
-            0 | LAST => Self::TOP_BOTTOM,
-            _ => Self::PIPE_ROW,
-        }
-    }
+    };
 }
 
 pub struct Terminal {
     stdout: Stdout,
-    inputs: Vec<Box<dyn Input>>,
+    blocks: Vec<Rc<RwLock<dyn Block>>>,
+    inputs: Vec<Rc<RwLock<dyn Input>>>,
+    block_names: HashMap<String, usize>,
     focused: Option<usize>,
 }
 impl Terminal {
     pub fn new() -> Self {
         Self {
             stdout: io::stdout(),
+            blocks: vec![],
+            block_names: HashMap::new(),
             inputs: vec![],
             focused: None,
         }
     }
 
-    pub fn add_input<I: Input + 'static>(&mut self, input: I) {
-        let boxed: Box<dyn Input> = Box::new(input);
-        let (bx, by) = boxed.input_pos();
-        let index = self.inputs.binary_search_by(|inp| {
-            let (x, y) = inp.input_pos();
-            match y.cmp(&by) {
-                std::cmp::Ordering::Equal => x.cmp(&bx),
-                ord => ord,
-            }
-        });
-        match index {
-            Ok(i) => self.inputs[i] = boxed,
-            Err(i) => self.inputs.insert(i, boxed),
-        }
-    }
-
-    pub fn rem_input(&mut self, pos: (u16, u16)) -> Option<Box<dyn Input>> {
-        let index = self.inputs.binary_search_by(|inp| {
-            let (x, y) = inp.input_pos();
-            match y.cmp(&pos.1) {
-                std::cmp::Ordering::Equal => x.cmp(&pos.1),
-                ord => ord,
-            }
-        });
-        let index = match index {
-            Ok(i) => i,
-            Err(_) => return None,
-        };
-        Some(self.inputs.remove(index))
-    }
-
-    pub fn run(&mut self) -> TerminalResult<()> {
-        crossterm::execute!(self.stdout, terminal::EnterAlternateScreen)?;
-        terminal::enable_raw_mode()?;
-        let mut inp = TextInput::default().with_pos(5, 5).with_width(24);
+    pub fn run(&mut self, size: (u16, u16)) -> TerminalResult<()> {
+        crossterm::execute!(
+            self.stdout,
+            terminal::EnterAlternateScreen,
+            terminal::SetSize(size.0, size.1)
+        )?;
 
         loop {
             queue!(
@@ -257,30 +84,13 @@ impl Terminal {
                 terminal::Clear(terminal::ClearType::All),
                 cursor::MoveTo(0, 0)
             )?;
-            for i in 0..END {
-                queue!(
-                    self.stdout,
-                    style::Print(Border::line(i)),
-                    cursor::MoveToNextLine(1)
-                )?;
-            }
-            self.draw_block(&inp)?;
-            self.input_cursor(&inp)?;
+            self.draw()?;
+            self.focus_cursor()?;
             self.stdout.flush()?;
-            match Self::read_key()? {
-                KeyEvent {
-                    code: KeyCode::Char('q'),
-                    modifiers: KeyModifiers::CONTROL,
-                    kind: KeyEventKind::Press,
-                    ..
-                } => {
-                    // execute!(w, cursor::SetCursorStyle::DefaultUserShape).unwrap();
-                    break;
-                }
-                event => {
-                    inp.feed(event);
-                }
-            };
+            match self.read()? {
+                TerminalCode::Exit => break,
+                _ => (),
+            }
         }
 
         crossterm::execute!(
@@ -290,36 +100,69 @@ impl Terminal {
             terminal::LeaveAlternateScreen
         )?;
 
-        terminal::disable_raw_mode()?;
         Ok(())
     }
 
-    fn draw_block(&mut self, block: &impl Block) -> io::Result<()> {
-        let (x, y) = block.pos();
-        queue!(self.stdout, cursor::MoveTo(x, y))?;
-        let mut i = 0;
-        while let Some(line) = block.rel_line(i) {
-            i += 1;
-            queue!(self.stdout, style::Print(line), cursor::MoveTo(x, y + i))?;
+    fn draw(&mut self) -> TerminalResult<()> {
+        for block in self.blocks.iter() {
+            let (x, y, _) = block.read().unwrap().pos();
+            queue!(self.stdout, cursor::MoveTo(x, y))?;
+            let mut i = 0;
+            while let Some(line) = block.read().unwrap().rel_line(i) {
+                i += 1;
+                queue!(
+                    self.stdout,
+                    style::Print(line),
+                    cursor::MoveTo(x, y + i)
+                )?;
+            }
         }
-
+        for block in self.inputs.iter() {
+            let block = block.read().unwrap();
+            let (x, y, _) = block.pos();
+            queue!(self.stdout, cursor::MoveTo(x, y))?;
+            let mut i = 0;
+            while let Some(line) = block.rel_line(i) {
+                i += 1;
+                queue!(
+                    self.stdout,
+                    style::Print(line),
+                    cursor::MoveTo(x, y + i)
+                )?;
+            }
+        }
         Ok(())
     }
 
-    fn input_cursor<Inp>(&mut self, input: &Inp) -> io::Result<()>
-    where
-        Inp: Block + Input,
-    {
-        if let Some((rx, ry)) = input.rel_cursor_pos() {
-            let (x, y) = input.pos();
+    fn focus_cursor(&mut self) -> TerminalResult<()> {
+        let input = match self.focused_input() {
+            Some(input) => Rc::clone(input),
+            None => return self.hide_cursor(),
+        };
+        if let Some((rx, ry)) = input.read().unwrap().rel_cursor_pos() {
+            let (x, y) = input.read().unwrap().input_pos();
             queue!(self.stdout, cursor::Show, cursor::MoveTo(x + rx, y + ry))
+                .map_err(TerminalError::from)
         } else {
             self.hide_cursor()
         }
     }
 
-    fn hide_cursor(&mut self) -> io::Result<()> {
-        queue!(self.stdout, cursor::Hide)
+    fn hide_cursor(&mut self) -> TerminalResult<()> {
+        queue!(self.stdout, cursor::Hide).map_err(TerminalError::from)
+    }
+
+    fn read(&mut self) -> TerminalResult<TerminalCode> {
+        match Self::read_key()? {
+            ctrl!('q') => Ok(TerminalCode::Exit),
+            up!() if !self.inputs.is_empty() => {
+                self.focus_prev_input().map(|_| TerminalCode::None)
+            }
+            down!() if !self.inputs.is_empty() => {
+                self.focus_next_input().map(|_| TerminalCode::None)
+            }
+            key => Ok(self.feed_focused(key)),
+        }
     }
 
     fn read_key() -> TerminalResult<KeyEvent> {
@@ -327,6 +170,71 @@ impl Terminal {
             if let Ok(Event::Key(event)) = event::read() {
                 return Ok(event);
             }
+        }
+    }
+
+    fn focus_input(
+        &mut self,
+        i: usize,
+    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
+        self.inputs
+            .get(i)
+            .map(|input| {
+                self.focused = Some(i);
+                input
+            })
+            .ok_or(TerminalError::NoInput(i))
+    }
+
+    fn feed_focused(&mut self, key: KeyEvent) -> TerminalCode {
+        match self.focused {
+            None => TerminalCode::UnhandledKey(key),
+            Some(i) => self.inputs[i].write().unwrap().feed(key),
+        }
+    }
+
+    fn get_input_at_pos(
+        &mut self,
+        pos: (u16, u16),
+    ) -> Result<(usize, &Rc<RwLock<dyn Input>>), usize> {
+        self.inputs
+            .binary_search_by(|inp| {
+                let (x, y) = inp.read().unwrap().input_pos();
+                match y.cmp(&pos.1) {
+                    std::cmp::Ordering::Equal => x.cmp(&pos.1),
+                    ord => ord,
+                }
+            })
+            .map(|index| (index, &self.inputs[index]))
+    }
+
+    /// Returns `(A, B)`
+    /// `A` is `Some(index)` if `pos` is found
+    /// `B` is the upper bound for `pos`
+    fn blocks_pos_search(
+        &self,
+        pos: &(u16, u16, u16),
+    ) -> (Option<usize>, usize) {
+        let ub = upper_bound(&self.blocks, pos, |(vx, vy, vz), block| {
+            let (bx, by, bz) = &block.read().unwrap().pos();
+            match vz.cmp(bz) {
+                Ordering::Equal => (),
+                o => return o,
+            }
+            match vy.cmp(by) {
+                Ordering::Equal => (),
+                o => return o,
+            }
+            vx.cmp(bx)
+        });
+        if ub == 0 {
+            return (None, ub);
+        }
+        let index = ub - 1;
+        if self.blocks[index].read().unwrap().pos() == *pos {
+            (Some(index), ub)
+        } else {
+            (None, ub)
         }
     }
 }
@@ -337,9 +245,135 @@ impl fmt::Debug for Terminal {
             .finish()
     }
 }
+/// Block functions
+impl Terminal {
+    pub fn insert_block<B: Block + 'static>(
+        &mut self,
+        name: String,
+        block: B,
+    ) -> TerminalResult<()> {
+        if self.block_names.contains_key(&name) {
+            return Err(TerminalError::NameExists(name));
+        }
+        let boxed: Rc<RwLock<dyn Block>> = Rc::new(RwLock::new(block));
+        let (_, upper) = self.blocks_pos_search(&boxed.read().unwrap().pos());
+        self.blocks.insert(upper, boxed);
+        for (_, index) in self.block_names.iter_mut() {
+            if *index >= upper {
+                *index += 1;
+            }
+        }
+        self.block_names.insert(name, upper);
+        Ok(())
+    }
 
+    pub fn remove_block(
+        &mut self,
+        name: &String,
+    ) -> Option<Rc<RwLock<dyn Block>>> {
+        let index = match self.block_names.get(name) {
+            Some(i) => *i,
+            None => return None,
+        };
+        let block = self.blocks.remove(index);
+        self.block_names.remove(name);
+        for (_, index2) in self.block_names.iter_mut() {
+            if *index2 >= index {
+                *index2 -= 1;
+            }
+        }
+        Some(block)
+    }
+
+    pub fn get_block(
+        &mut self,
+        name: &String,
+    ) -> Option<&Rc<RwLock<dyn Block>>> {
+        let index = match self.block_names.get(name) {
+            Some(i) => *i,
+            None => return None,
+        };
+        self.blocks.get(index)
+    }
+}
+/// Input functions
+impl Terminal {
+    pub fn insert_input<I: Input + 'static>(
+        &mut self,
+        input: I,
+    ) -> Option<Rc<RwLock<dyn Input>>> {
+        let pos = input.input_pos();
+        let boxed: Rc<RwLock<dyn Input>> = Rc::new(RwLock::new(input));
+        let ret = match self.get_input_at_pos(pos) {
+            Ok((i, _)) => {
+                let el = self.inputs.remove(i);
+                self.inputs.insert(i, boxed);
+                Some(el)
+            }
+            Err(i) => {
+                self.inputs.insert(i, boxed);
+                None
+            }
+        };
+        if self.inputs.len() == 1 {
+            self.focus_input(0)
+                .expect("Qualified: Guaranteed to be at least one input");
+        }
+        ret
+    }
+
+    pub fn remove_input(
+        &mut self,
+        pos: (u16, u16),
+    ) -> Option<Rc<RwLock<dyn Input>>> {
+        match self.get_input_at_pos(pos) {
+            Ok((i, _)) => Some(self.inputs.remove(i)),
+            Err(_) => None,
+        }
+    }
+
+    pub fn focused_input(&self) -> Option<&Rc<RwLock<dyn Input>>> {
+        self.focused.map(|i| &self.inputs[i])
+    }
+
+    pub fn focus_prev_input(
+        &mut self,
+    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
+        match self.focused {
+            None => self.focus_input(self.inputs.len() - 1),
+            Some(0) => self.focus_input(0),
+            Some(i) => self.focus_input(i - 1),
+        }
+    }
+
+    pub fn focus_next_input(
+        &mut self,
+    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
+        match self.focused {
+            None => self.focus_input(0),
+            Some(i) if i == self.inputs.len() - 1 => self.focus_input(i),
+            Some(i) => self.focus_input(i + 1),
+        }
+    }
+
+    pub fn focus_input_at(
+        &mut self,
+        pos: (u16, u16),
+    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
+        match self.get_input_at_pos(pos) {
+            Ok((i, _)) => self.focus_input(i),
+            Err(_) => Err(TerminalError::NoInputAt(pos)),
+        }
+    }
+}
 #[derive(Debug, thiserror::Error)]
 pub enum TerminalError {
+    #[error("No input on index {0}")]
+    NoInput(usize),
+    #[error("No input at position {0:?}")]
+    NoInputAt((u16, u16)),
+    #[error("Name already exists: {0}")]
+    NameExists(String),
     #[error(transparent)]
     IO(#[from] io::Error),
 }

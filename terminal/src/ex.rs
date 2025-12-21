@@ -110,7 +110,7 @@ fn main() -> TerminalResult<()> {
     // run(&mut stdout)
 }
 
-/*
+/*https://www.lennyfacecopypaste.com/text-symbols/line.html
 Glyph                       ACS            Ascii     acsc     acsc
 Name                        Name           Default   Char     Value
 ────────────────────────────────────────────────────────────────────
