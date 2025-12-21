@@ -9,7 +9,7 @@ pub trait Block {
 
 pub trait Input: Block {
     /// Unavailable KeyEvents:
-    /// - `KeyModifiers::CONTROL`
+    /// - `KeyModifiers::CONTROL + KeyCode::Char('q')`
     /// - `KeyCode::Up`
     /// - `KeyCode::DOWN`
     fn feed(&mut self, key: KeyEvent) -> TerminalCode;

@@ -2,6 +2,7 @@ pub mod code;
 pub mod elements;
 mod ext;
 pub mod traits;
+pub use crossterm::event;
 
 use std::{
     cmp::Ordering,
@@ -14,7 +15,7 @@ use std::{
 
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     queue, style, terminal,
 };
 

@@ -2,8 +2,11 @@ use crate::{
     ext::Tree,
     hangul::{Hangul, HangulResult},
     jamo::Jamo,
+    syllable::Syllable,
 };
 
+pub type IsBreak = bool;
+#[derive(Debug)]
 pub struct HangulParser(Tree<char, Jamo>);
 impl HangulParser {
     pub fn new() -> Self {
@@ -30,7 +33,7 @@ impl HangulParser {
         tree.insert_str("bs", Jamo::Bs);
         tree.insert_str("s", Jamo::S);
         tree.insert_str("ss", Jamo::Ss);
-        tree.insert_str("ng", Jamo::Silent);
+        tree.insert_str("ng", Jamo::Ng);
         tree.insert_str("j", Jamo::J);
         tree.insert_str("jj", Jamo::Jj);
         tree.insert_str("ch", Jamo::Ch);
@@ -81,12 +84,29 @@ impl HangulParser {
         hangul: &mut Hangul,
         input: &'a str,
     ) -> HangulResult<&'a str> {
+        match self.parse_jamo(input) {
+            (Some(j), false, ret) => {
+                hangul.push_back(j)?;
+                Ok(ret)
+            }
+            (Some(j), true, ret) => {
+                hangul.break_with(j)?;
+                Ok(ret)
+            }
+            (None, _, ret) => Ok(ret),
+        }
+    }
+
+    pub fn parse_jamo<'a>(
+        &self,
+        input: &'a str,
+    ) -> (Option<Jamo>, IsBreak, &'a str) {
         let mut input = input;
         let mut is_break = false;
         while matches!(input.chars().nth(0).unwrap_or(' '), ' ' | '-') {
             is_break = true;
             if input.is_empty() {
-                return Ok(input);
+                return (None, is_break, input);
             }
             input = input.split_at(1).1;
         }
@@ -100,20 +120,39 @@ impl HangulParser {
 
             match self.0.get_str(s) {
                 Some(j) => {
-                    if is_break {
-                        hangul.break_with(j)?;
-                    } else {
-                        hangul.push_back(j)?;
-                    }
-                    return Ok(ret);
+                    return (Some(j), is_break, ret);
                 }
                 None => continue,
             };
         }
-        Ok(input)
+        (None, is_break, input)
     }
 
-    pub fn with_prefix(&self, token: &str) -> Vec<Jamo> {
+    pub fn parse_syllable<'a>(&self, input: &'a str) -> (Syllable, &'a str) {
+        let mut i = input;
+        let mut syl = Syllable::default();
+        while !i.is_empty() {
+            let (jamo, pi) = match self.parse_jamo(i) {
+                (Some(j), _, rst) => (j, rst),
+                (None, _, ret) => return (syl, ret),
+            };
+
+            match syl.push(jamo) {
+                Ok(None) => (),
+                _ => return (syl, i),
+            }
+
+            i = pi;
+        }
+        (syl, i)
+    }
+
+    pub fn with_prefix(&self, token: &str) -> Vec<(String, Jamo)> {
         self.0.with_prefix(token)
+    }
+}
+impl Default for HangulParser {
+    fn default() -> Self {
+        Self::new()
     }
 }

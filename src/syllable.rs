@@ -2,7 +2,7 @@ use std::fmt::{Display, Write};
 
 use crate::jamo::{FinalJamo, InitialJamo, Jamo, JamoError, MedialJamo};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
     /// Next input must be initial or medial
     Start,
@@ -23,7 +23,11 @@ pub struct Syllable {
     finale: Option<FinalJamo>,
 }
 impl Syllable {
-    pub fn state(self) -> State {
+    pub fn is_empty(&self) -> bool {
+        self.state() == State::Start
+    }
+
+    pub fn state(&self) -> State {
         match (self.initial, self.medial, self.finale) {
             (None, _, _) => State::Start,
             (Some(_), None, _) => State::Medial,
@@ -38,7 +42,7 @@ impl Syllable {
         }
     }
 
-    pub fn possible(self) -> Vec<Jamo> {
+    pub fn possible(&self) -> Vec<Jamo> {
         match self.state() {
             State::Start => Jamo::all_multi(true, true, false),
             State::Medial => Jamo::all_medial(),
@@ -52,6 +56,18 @@ impl Syllable {
             }
             State::End => vec![],
         }
+    }
+
+    pub fn initial(&self) -> Option<InitialJamo> {
+        self.initial
+    }
+
+    pub fn medial(&self) -> Option<MedialJamo> {
+        self.medial
+    }
+
+    pub fn finale(&self) -> Option<FinalJamo> {
+        self.finale
     }
 
     /// .
@@ -86,7 +102,7 @@ impl Syllable {
                     self.initial = Some(ij);
                     Ok(None)
                 } else if let Ok(mj) = MedialJamo::try_from(jamo) {
-                    self.initial = Some(InitialJamo::Silent);
+                    self.initial = Some(InitialJamo::Ng);
                     self.medial = Some(mj);
                     Ok(None)
                 } else {
@@ -210,9 +226,37 @@ impl Syllable {
             }
         }
     }
+}
+impl TryFrom<Syllable> for char {
+    type Error = ();
 
-    pub fn is_empty(&self) -> bool {
-        self.initial.is_none()
+    fn try_from(value: Syllable) -> Result<Self, ()> {
+        char::try_from(&value)
+    }
+}
+impl TryFrom<&Syllable> for char {
+    type Error = ();
+
+    fn try_from(value: &Syllable) -> Result<Self, ()> {
+        if let Some(ij) = value.initial
+            && value.medial.is_none()
+        {
+            Ok(Self::from(Jamo::from(ij)))
+        } else if let Some(ij) = value.initial
+            && let Some(mj) = value.medial
+        {
+            let ini = ij.id();
+            let med = mj.id();
+            let fin = value.finale.map(FinalJamo::id).unwrap_or(0);
+
+            let unicode: u32 = (0xac00 + ini * 588 + med * 28 + fin) as u32;
+
+            // Safety: all combinations of ini, med, fin are guaranteed to be
+            // less than 0xD7A4
+            Ok(unsafe { char::from_u32_unchecked(unicode) })
+        } else {
+            Err(())
+        }
     }
 }
 impl From<InitialJamo> for Syllable {
@@ -226,7 +270,7 @@ impl From<InitialJamo> for Syllable {
 impl From<MedialJamo> for Syllable {
     fn from(value: MedialJamo) -> Self {
         Self {
-            initial: Some(InitialJamo::Silent),
+            initial: Some(InitialJamo::Ng),
             medial: Some(value),
             ..Default::default()
         }
@@ -243,26 +287,9 @@ impl TryFrom<Jamo> for Syllable {
 }
 impl Display for Syllable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(ij) = self.initial
-            && self.medial.is_none()
-        {
-            write!(f, "{}", Jamo::from(ij))
-        } else if let Some(ij) = self.initial
-            && let Some(mj) = self.medial
-        {
-            let ini = ij.id();
-            let med = mj.id();
-            let fin = self.finale.map(FinalJamo::id).unwrap_or(0);
-
-            let unicode: u32 = (0xac00 + ini * 588 + med * 28 + fin) as u32;
-
-            // Safety: all combinations of ini, med, fin are guaranteed to be
-            // less than 0xD7A4
-            let chr = unsafe { char::from_u32_unchecked(unicode) };
-
-            f.write_char(chr)
-        } else {
-            Ok(())
+        match char::try_from(self) {
+            Ok(chr) => f.write_char(chr),
+            Err(_) => Ok(()),
         }
     }
 }

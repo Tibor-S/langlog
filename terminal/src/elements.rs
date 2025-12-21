@@ -37,7 +37,9 @@ impl TextLine {
     }
 
     pub fn with_value(&mut self, value: String) -> &mut Self {
+        self.display_width = self.display_width.max(1);
         self.value = value;
+        self.index = self.len();
         self
     }
 
@@ -51,6 +53,10 @@ impl TextLine {
 
     pub fn len(&self) -> u16 {
         self.value.chars().count() as u16
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
     }
 }
 
@@ -115,8 +121,8 @@ impl Input for TextLine {
             }
             KeyEvent {
                 code: KeyCode::Left,
-                modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
+                modifiers: KeyModifiers::NONE,
                 ..
             } => {
                 self.index = self.index.saturating_sub_signed(1);
@@ -124,8 +130,8 @@ impl Input for TextLine {
             }
             KeyEvent {
                 code: KeyCode::Right,
-                modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
+                modifiers: KeyModifiers::NONE,
                 ..
             } => {
                 self.index += 1;
@@ -134,11 +140,11 @@ impl Input for TextLine {
             }
             KeyEvent {
                 code: KeyCode::Backspace,
-                modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
+                modifiers: KeyModifiers::NONE,
                 ..
             } => {
-                if self.len() == 0 {
+                if self.len() == 0 || self.index == 0 {
                     TerminalCode::UnhandledKey(key)
                 } else {
                     self.index -= 1;
