@@ -18,7 +18,7 @@ mod syllable;
 // 4:3 becomes 8:3
 fn main() -> TerminalResult<()> {
     pretty_env_logger::init();
-    let mut term = Terminal::new();
+    let mut term = Terminal::new("main".into());
     term.insert_block(
         "mid-line-v".into(),
         LineVertical::default()

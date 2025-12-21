@@ -55,19 +55,17 @@ macro_rules! down {
 
 pub struct Terminal {
     stdout: Stdout,
-    blocks: Vec<Rc<RwLock<dyn Block>>>,
-    inputs: Vec<Rc<RwLock<dyn Input>>>,
-    block_names: HashMap<String, usize>,
-    focused: Option<usize>,
+    scenes: HashMap<String, Scene>,
+    current_scene: String,
 }
 impl Terminal {
-    pub fn new() -> Self {
+    pub fn new(initial_scene: String) -> Self {
+        let mut scenes = HashMap::default();
+        scenes.insert(initial_scene.clone(), Scene::default());
         Self {
             stdout: io::stdout(),
-            blocks: vec![],
-            block_names: HashMap::new(),
-            inputs: vec![],
-            focused: None,
+            scenes,
+            current_scene: initial_scene,
         }
     }
 
@@ -104,8 +102,20 @@ impl Terminal {
         Ok(())
     }
 
+    pub fn scene(&self) -> &Scene {
+        &self.scenes[&self.current_scene]
+    }
+
+    pub fn scene_mut(&mut self) -> &mut Scene {
+        self.scenes
+            .get_mut(&self.current_scene)
+            .expect("Logic error! Scene did not exist")
+    }
+
     fn draw(&mut self) -> TerminalResult<()> {
-        for block in self.blocks.iter() {
+        let blocks = self.scene().blocks.clone();
+        let inputs = self.scene().inputs.clone();
+        for block in blocks {
             let (x, y, _) = block.read().unwrap().pos();
             queue!(self.stdout, cursor::MoveTo(x, y))?;
             let mut i = 0;
@@ -118,7 +128,7 @@ impl Terminal {
                 )?;
             }
         }
-        for block in self.inputs.iter() {
+        for block in inputs {
             let block = block.read().unwrap();
             let (x, y, _) = block.pos();
             queue!(self.stdout, cursor::MoveTo(x, y))?;
@@ -156,10 +166,10 @@ impl Terminal {
     fn read(&mut self) -> TerminalResult<TerminalCode> {
         match Self::read_key()? {
             ctrl!('q') => Ok(TerminalCode::Exit),
-            up!() if !self.inputs.is_empty() => {
+            up!() if !self.scene().inputs.is_empty() => {
                 self.focus_prev_input().map(|_| TerminalCode::None)
             }
-            down!() if !self.inputs.is_empty() => {
+            down!() if !self.scene().inputs.is_empty() => {
                 self.focus_next_input().map(|_| TerminalCode::None)
             }
             key => Ok(self.feed_focused(key)),
@@ -177,20 +187,19 @@ impl Terminal {
     fn focus_input(
         &mut self,
         i: usize,
-    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
-        self.inputs
-            .get(i)
-            .map(|input| {
-                self.focused = Some(i);
-                input
-            })
-            .ok_or(TerminalError::NoInput(i))
+    ) -> TerminalResult<Rc<RwLock<dyn Input>>> {
+        let opt = self.scene().inputs.get(i).cloned();
+        opt.map(|input| {
+            self.scene_mut().focused = Some(i);
+            input
+        })
+        .ok_or(TerminalError::NoInput(i))
     }
 
     fn feed_focused(&mut self, key: KeyEvent) -> TerminalCode {
-        match self.focused {
+        match self.scene().focused {
             None => TerminalCode::UnhandledKey(key),
-            Some(i) => self.inputs[i].write().unwrap().feed(key),
+            Some(i) => self.scene_mut().inputs[i].write().unwrap().feed(key),
         }
     }
 
@@ -198,7 +207,8 @@ impl Terminal {
         &mut self,
         pos: (u16, u16),
     ) -> Result<(usize, &Rc<RwLock<dyn Input>>), usize> {
-        self.inputs
+        self.scene()
+            .inputs
             .binary_search_by(|inp| {
                 let (x, y) = inp.read().unwrap().input_pos();
                 match y.cmp(&pos.1) {
@@ -206,7 +216,7 @@ impl Terminal {
                     ord => ord,
                 }
             })
-            .map(|index| (index, &self.inputs[index]))
+            .map(|index| (index, &self.scene().inputs[index]))
     }
 
     /// Returns `(A, B)`
@@ -216,23 +226,24 @@ impl Terminal {
         &self,
         pos: &(u16, u16, u16),
     ) -> (Option<usize>, usize) {
-        let ub = upper_bound(&self.blocks, pos, |(vx, vy, vz), block| {
-            let (bx, by, bz) = &block.read().unwrap().pos();
-            match vz.cmp(bz) {
-                Ordering::Equal => (),
-                o => return o,
-            }
-            match vy.cmp(by) {
-                Ordering::Equal => (),
-                o => return o,
-            }
-            vx.cmp(bx)
-        });
+        let ub =
+            upper_bound(&self.scene().blocks, pos, |(vx, vy, vz), block| {
+                let (bx, by, bz) = &block.read().unwrap().pos();
+                match vz.cmp(bz) {
+                    Ordering::Equal => (),
+                    o => return o,
+                }
+                match vy.cmp(by) {
+                    Ordering::Equal => (),
+                    o => return o,
+                }
+                vx.cmp(bx)
+            });
         if ub == 0 {
             return (None, ub);
         }
         let index = ub - 1;
-        if self.blocks[index].read().unwrap().pos() == *pos {
+        if self.scene().blocks[index].read().unwrap().pos() == *pos {
             (Some(index), ub)
         } else {
             (None, ub)
@@ -253,18 +264,18 @@ impl Terminal {
         name: String,
         block: B,
     ) -> TerminalResult<()> {
-        if self.block_names.contains_key(&name) {
+        if self.scene().block_names.contains_key(&name) {
             return Err(TerminalError::NameExists(name));
         }
         let boxed: Rc<RwLock<dyn Block>> = Rc::new(RwLock::new(block));
         let (_, upper) = self.blocks_pos_search(&boxed.read().unwrap().pos());
-        self.blocks.insert(upper, boxed);
-        for (_, index) in self.block_names.iter_mut() {
+        self.scene_mut().blocks.insert(upper, boxed);
+        for (_, index) in self.scene_mut().block_names.iter_mut() {
             if *index >= upper {
                 *index += 1;
             }
         }
-        self.block_names.insert(name, upper);
+        self.scene_mut().block_names.insert(name, upper);
         Ok(())
     }
 
@@ -272,13 +283,13 @@ impl Terminal {
         &mut self,
         name: &String,
     ) -> Option<Rc<RwLock<dyn Block>>> {
-        let index = match self.block_names.get(name) {
+        let index = match self.scene().block_names.get(name) {
             Some(i) => *i,
             None => return None,
         };
-        let block = self.blocks.remove(index);
-        self.block_names.remove(name);
-        for (_, index2) in self.block_names.iter_mut() {
+        let block = self.scene_mut().blocks.remove(index);
+        self.scene_mut().block_names.remove(name);
+        for (_, index2) in self.scene_mut().block_names.iter_mut() {
             if *index2 >= index {
                 *index2 -= 1;
             }
@@ -290,11 +301,11 @@ impl Terminal {
         &mut self,
         name: &String,
     ) -> Option<&Rc<RwLock<dyn Block>>> {
-        let index = match self.block_names.get(name) {
+        let index = match self.scene().block_names.get(name) {
             Some(i) => *i,
             None => return None,
         };
-        self.blocks.get(index)
+        self.scene().blocks.get(index)
     }
 }
 /// Input functions
@@ -307,16 +318,16 @@ impl Terminal {
         let boxed: Rc<RwLock<dyn Input>> = Rc::new(RwLock::new(input));
         let ret = match self.get_input_at_pos(pos) {
             Ok((i, _)) => {
-                let el = self.inputs.remove(i);
-                self.inputs.insert(i, boxed);
+                let el = self.scene_mut().inputs.remove(i);
+                self.scene_mut().inputs.insert(i, boxed);
                 Some(el)
             }
             Err(i) => {
-                self.inputs.insert(i, boxed);
+                self.scene_mut().inputs.insert(i, boxed);
                 None
             }
         };
-        if self.inputs.len() == 1 {
+        if self.scene().inputs.len() == 1 {
             self.focus_input(0)
                 .expect("Qualified: Guaranteed to be at least one input");
         }
@@ -328,20 +339,20 @@ impl Terminal {
         pos: (u16, u16),
     ) -> Option<Rc<RwLock<dyn Input>>> {
         match self.get_input_at_pos(pos) {
-            Ok((i, _)) => Some(self.inputs.remove(i)),
+            Ok((i, _)) => Some(self.scene_mut().inputs.remove(i)),
             Err(_) => None,
         }
     }
 
     pub fn focused_input(&self) -> Option<&Rc<RwLock<dyn Input>>> {
-        self.focused.map(|i| &self.inputs[i])
+        self.scene().focused.map(|i| &self.scene().inputs[i])
     }
 
     pub fn focus_prev_input(
         &mut self,
-    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
-        match self.focused {
-            None => self.focus_input(self.inputs.len() - 1),
+    ) -> TerminalResult<Rc<RwLock<dyn Input>>> {
+        match self.scene().focused {
+            None => self.focus_input(self.scene().inputs.len() - 1),
             Some(0) => self.focus_input(0),
             Some(i) => self.focus_input(i - 1),
         }
@@ -349,10 +360,12 @@ impl Terminal {
 
     pub fn focus_next_input(
         &mut self,
-    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
-        match self.focused {
+    ) -> TerminalResult<Rc<RwLock<dyn Input>>> {
+        match self.scene().focused {
             None => self.focus_input(0),
-            Some(i) if i == self.inputs.len() - 1 => self.focus_input(i),
+            Some(i) if i == self.scene().inputs.len() - 1 => {
+                self.focus_input(i)
+            }
             Some(i) => self.focus_input(i + 1),
         }
     }
@@ -360,11 +373,37 @@ impl Terminal {
     pub fn focus_input_at(
         &mut self,
         pos: (u16, u16),
-    ) -> TerminalResult<&Rc<RwLock<dyn Input>>> {
+    ) -> TerminalResult<Rc<RwLock<dyn Input>>> {
         match self.get_input_at_pos(pos) {
             Ok((i, _)) => self.focus_input(i),
             Err(_) => Err(TerminalError::NoInputAt(pos)),
         }
+    }
+}
+
+#[derive(Default)]
+pub struct Scene {
+    pub(crate) blocks: Vec<Rc<RwLock<dyn Block>>>,
+    pub(crate) inputs: Vec<Rc<RwLock<dyn Input>>>,
+    pub(crate) block_names: HashMap<String, usize>,
+    pub(crate) focused: Option<usize>,
+}
+
+impl Scene {
+    pub fn blocks(&self) -> &[Rc<RwLock<dyn Block + 'static>>] {
+        &self.blocks
+    }
+
+    pub fn inputs(&self) -> &[Rc<RwLock<dyn Input + 'static>>] {
+        &self.inputs
+    }
+
+    pub fn block_names(&self) -> &HashMap<String, usize> {
+        &self.block_names
+    }
+
+    pub fn focused(&self) -> Option<usize> {
+        self.focused
     }
 }
 #[derive(Debug, thiserror::Error)]
