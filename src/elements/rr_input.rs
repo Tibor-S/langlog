@@ -1,7 +1,10 @@
+use std::ops::Range;
+
 use terminal::{
     code::TerminalCode,
     elements::{Dispatch, TextLine},
     event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    style::{Attribute, Attributes, Color, ContentStyle},
     traits::{Block, Input},
 };
 
@@ -48,6 +51,30 @@ impl Block for RrInput {
 
     fn rel_line(&self, i: u16) -> Option<String> {
         self.input.rel_line(i)
+    }
+
+    fn style_line(&self, i: u16) -> Vec<(Range<usize>, ContentStyle)> {
+        if i != 0 {
+            return vec![];
+        }
+        let mut error_range =
+            0..self.hangul_result.read().unwrap().overflow().len();
+        let diff =
+            (self.input.len() as usize).saturating_sub(error_range.len());
+        error_range.start += diff;
+        error_range.end += diff;
+
+        let style = ContentStyle {
+            foreground_color: Some(Color::Red),
+            underline_color: Some(Color::Red),
+            attributes: Attributes::none()
+                .with(Attribute::Underlined)
+                .with(Attribute::NoBlink)
+                .with(Attribute::NotCrossedOut),
+            ..Default::default()
+        };
+
+        vec![(error_range, style)]
     }
 }
 impl Input for RrInput {

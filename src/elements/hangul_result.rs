@@ -1,4 +1,9 @@
-use terminal::traits::Block;
+use std::ops::Range;
+
+use terminal::{
+    style::{Attribute, Attributes, ContentStyle},
+    traits::Block,
+};
 
 use crate::{hangul::Hangul, hangul_parser::HangulParser, syllable::Syllable};
 
@@ -56,5 +61,19 @@ impl Block for HangulResult {
             0 => Some(format!("{}{}", self.str, self.syllable)),
             _ => None,
         }
+    }
+
+    fn style_line(&self, i: u16) -> Vec<(Range<usize>, ContentStyle)> {
+        if i != 0 {
+            return vec![];
+        }
+        // utf-8 byte count
+        let str = format!("{}", self.str);
+        let ex = format!("{}", self.syllable);
+        let style = ContentStyle {
+            attributes: Attributes::none().with(Attribute::RapidBlink),
+            ..Default::default()
+        };
+        vec![(str.len()..(str.len() + ex.len()), style)]
     }
 }

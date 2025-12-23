@@ -4,7 +4,10 @@ use std::{
     sync::RwLock,
 };
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::{
+    event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    style::ContentStyle,
+};
 
 use crate::{
     code::TerminalCode,
@@ -214,6 +217,10 @@ impl<B: Block> Block for Dispatch<B> {
 
     fn rel_line(&self, i: u16) -> Option<String> {
         self.read().unwrap().rel_line(i)
+    }
+
+    fn style_line(&self, i: u16) -> Vec<(Range<usize>, ContentStyle)> {
+        self.read().unwrap().style_line(i)
     }
 }
 impl<I: Input> Input for Dispatch<I> {

@@ -3,6 +3,8 @@ pub mod elements;
 mod ext;
 pub mod traits;
 pub use crossterm::event;
+pub use crossterm::style;
+use crossterm::style::StyledContent;
 
 use std::{
     cmp::Ordering,
@@ -14,7 +16,7 @@ use std::{
 use crossterm::{
     cursor,
     event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    queue, style, terminal,
+    queue, terminal,
 };
 
 use crate::{
@@ -32,19 +34,19 @@ macro_rules! ctrl {
         }
     };
 }
-macro_rules! up {
+macro_rules! tab {
     () => {
         KeyEvent {
-            code: KeyCode::Up,
+            code: KeyCode::Tab,
             kind: KeyEventKind::Press,
             ..
         }
     };
 }
-macro_rules! down {
+macro_rules! back_tab {
     () => {
         KeyEvent {
-            code: KeyCode::Down,
+            code: KeyCode::BackTab,
             kind: KeyEventKind::Press,
             ..
         }
@@ -110,27 +112,71 @@ impl Terminal {
     }
 
     fn draw(&self, w: &mut Stdout) -> TerminalResult<()> {
-        for block in self.scene().blocks() {
+        let blocks = self.scene().blocks().iter().map(|b| b.as_ref()).chain(
+            self.scene()
+                .inputs()
+                .iter()
+                .map(|i| i.as_ref() as &dyn Block),
+        );
+        for block in blocks {
             let (x, y, _) = block.pos();
             queue!(w, cursor::MoveTo(x, y))?;
             let mut i = 0;
             while let Some(line) = block.rel_line(i) {
+                let styles = block.style_line(i);
+                let mut print_range = 0..line.len();
                 i += 1;
-                queue!(w, style::Print(line), cursor::MoveTo(x, y + i))?;
+
+                // Print
+                for (mut range, style) in styles {
+                    // Safety check
+                    log::error!(
+                        "\nRange: {:?}, \nStyle: {:?}\n",
+                        range.clone(),
+                        style
+                    );
+                    range.start = range.start.min(print_range.end);
+                    range.end = range.end.min(print_range.end);
+                    // Let print_range catch up with range
+                    let until = print_range.start..range.start;
+                    if !until.is_empty() {
+                        queue!(w, style::Print(&line[until]),)?;
+                    }
+
+                    print_range.start = range.end;
+                    queue!(
+                        w,
+                        style::PrintStyledContent(StyledContent::new(
+                            style,
+                            &line[range]
+                        ))
+                    )?;
+                    if print_range.is_empty() {
+                        break;
+                    }
+                }
+                queue!(
+                    w,
+                    style::Print(&line[print_range]),
+                    cursor::MoveTo(x, y + i)
+                )?;
+                //
             }
         }
-        for block in self.scene().inputs() {
-            let block = block;
-            let (x, y, _) = block.pos();
-            queue!(w, cursor::MoveTo(x, y))?;
-            let mut i = 0;
-            while let Some(line) = block.rel_line(i) {
-                i += 1;
-                queue!(w, style::Print(line), cursor::MoveTo(x, y + i))?;
-            }
-        }
+        // for block in self.scene().inputs() {
+        //     let block = block;
+        //     let (x, y, _) = block.pos();
+        //     queue!(w, cursor::MoveTo(x, y))?;
+        //     let mut i = 0;
+        //     while let Some(line) = block.rel_line(i) {
+        //         i += 1;
+        //         queue!(w, style::Print(line), cursor::MoveTo(x, y + i))?;
+        //     }
+        // }
         Ok(())
     }
+
+    // fn print_line(w: &mut Stdout)
 
     fn focus_cursor(&self, w: &mut Stdout) -> TerminalResult<()> {
         let input = match self.scene().focused_input() {
@@ -149,11 +195,11 @@ impl Terminal {
     fn read(&mut self) -> TerminalResult<TerminalCode> {
         match Self::read_key()? {
             ctrl!('q') => Ok(TerminalCode::Exit),
-            up!() if !self.scene().inputs.is_empty() => self
+            back_tab!() if !self.scene().inputs.is_empty() => self
                 .scene_mut()
                 .focus_prev_input()
                 .map(|_| TerminalCode::None),
-            down!() if !self.scene().inputs.is_empty() => self
+            tab!() if !self.scene().inputs.is_empty() => self
                 .scene_mut()
                 .focus_next_input()
                 .map(|_| TerminalCode::None),
