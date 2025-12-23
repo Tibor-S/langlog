@@ -1,6 +1,7 @@
 use terminal::{
     Scene, TerminalResult,
-    elements::{Dispatch, LineHorizontal, LineVertical, TextLine},
+    code::TerminalCode,
+    elements::{Button, Dispatch, LineHorizontal, LineVertical, TextLine},
 };
 
 use crate::elements::{
@@ -8,8 +9,8 @@ use crate::elements::{
 };
 
 /* All syllables take 2 columns
- *           1         2         3         4         5         6         7         8
- * 012345678901234567890123456789012345678901234567890123456789012345678901234567890
+             1         2         3         4         5         6         7         8
+   012345678901234567890123456789012345678901234567890123456789012345678901234567890
 00 +――――――――――――――top-1――――――――――――――――――――+―――――――――――――top-2―――――――――――――――――――――+
 01     ------ Info ------                  │       ----  LOG ----
 02 +―――――+――――――――info-bot―――――――――――――――――+
@@ -189,7 +190,7 @@ pub fn main_scene() -> TerminalResult<Scene> {
     /*
      * Desc
      */
-    let _ = {
+    let description_input = {
         let d = DescriptionInput::from(
             TextLine::default().with_pos(8, 7).with_width(31),
         );
@@ -203,6 +204,25 @@ pub fn main_scene() -> TerminalResult<Scene> {
         )?;
         scene.insert_input(d.clone());
         d
+    };
+    /*
+     * SAVE
+     */
+    {
+        let hr = hangul_result.clone();
+        let di = description_input.clone();
+        let b = Button::new(
+            (31, 9, 0),
+            "SAVE".into(),
+            8,
+            2,
+            Some(move || {
+                log::error!("hr: {}", hr.read().unwrap().str());
+                log::error!("di: {}\n", di.read().unwrap().value());
+                TerminalCode::None
+            }),
+        );
+        scene.insert_input(b);
     };
     /*
      * Combinations

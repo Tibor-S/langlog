@@ -130,11 +130,6 @@ impl Terminal {
                 // Print
                 for (mut range, style) in styles {
                     // Safety check
-                    log::error!(
-                        "\nRange: {:?}, \nStyle: {:?}\n",
-                        range.clone(),
-                        style
-                    );
                     range.start = range.start.min(print_range.end);
                     range.end = range.end.min(print_range.end);
                     // Let print_range catch up with range
@@ -160,23 +155,10 @@ impl Terminal {
                     style::Print(&line[print_range]),
                     cursor::MoveTo(x, y + i)
                 )?;
-                //
             }
         }
-        // for block in self.scene().inputs() {
-        //     let block = block;
-        //     let (x, y, _) = block.pos();
-        //     queue!(w, cursor::MoveTo(x, y))?;
-        //     let mut i = 0;
-        //     while let Some(line) = block.rel_line(i) {
-        //         i += 1;
-        //         queue!(w, style::Print(line), cursor::MoveTo(x, y + i))?;
-        //     }
-        // }
         Ok(())
     }
-
-    // fn print_line(w: &mut Stdout)
 
     fn focus_cursor(&self, w: &mut Stdout) -> TerminalResult<()> {
         let input = match self.scene().focused_input() {
@@ -369,11 +351,19 @@ impl Scene {
         }
     }
 
-    pub fn focused_input(&self) -> Option<&Box<dyn Input>> {
-        self.focused.map(|i| &self.inputs[i])
+    pub fn focused_input(&self) -> Option<&dyn Input> {
+        self.focused.map(|i| self.inputs[i].as_ref())
     }
 
-    pub fn focus_prev_input(&mut self) -> TerminalResult<&Box<dyn Input>> {
+    pub fn focused_input_mut(&mut self) -> Option<&mut dyn Input> {
+        let index = match self.focused {
+            Some(v) => v,
+            None => return None,
+        };
+        Some(self.inputs[index].as_mut())
+    }
+
+    pub fn focus_prev_input(&mut self) -> TerminalResult<&dyn Input> {
         match self.focused {
             None => self.focus_input(self.inputs.len() - 1),
             Some(0) => self.focus_input(0),
@@ -381,7 +371,7 @@ impl Scene {
         }
     }
 
-    pub fn focus_next_input(&mut self) -> TerminalResult<&Box<dyn Input>> {
+    pub fn focus_next_input(&mut self) -> TerminalResult<&dyn Input> {
         match self.focused {
             None => self.focus_input(0),
             Some(i) if i == self.inputs.len() - 1 => self.focus_input(i),
@@ -392,7 +382,7 @@ impl Scene {
     pub fn focus_input_at(
         &mut self,
         pos: (u16, u16),
-    ) -> TerminalResult<&Box<dyn Input>> {
+    ) -> TerminalResult<&dyn Input> {
         match self.get_input_at_pos(pos) {
             Ok((i, _)) => self.focus_input(i),
             Err(_) => Err(TerminalError::NoInputAt(pos)),
@@ -402,26 +392,42 @@ impl Scene {
     fn get_input_at_pos(
         &mut self,
         pos: (u16, u16),
-    ) -> Result<(usize, &Box<dyn Input>), usize> {
-        self.inputs
-            .binary_search_by(|inp| {
-                let (x, y) = inp.input_pos();
-                match y.cmp(&pos.1) {
-                    std::cmp::Ordering::Equal => x.cmp(&pos.0),
-                    ord => ord,
-                }
-            })
-            .map(|index| (index, &self.inputs[index]))
+    ) -> Result<(usize, &dyn Input), usize> {
+        let index = match self.inputs.binary_search_by(|inp| {
+            let (x, y) = inp.input_pos();
+            match y.cmp(&pos.1) {
+                std::cmp::Ordering::Equal => x.cmp(&pos.0),
+                ord => ord,
+            }
+        }) {
+            Ok(i) => i,
+            Err(i) => return Err(i),
+        };
+
+        Ok((index, self.inputs[index].as_ref()))
     }
 
-    fn focus_input(&mut self, i: usize) -> TerminalResult<&Box<dyn Input>> {
-        let opt = self.inputs.get(i);
-        opt.map(|input| {
-            self.focused = Some(i);
-            input
-        })
-        .ok_or(TerminalError::NoInput(i))
+    fn focus_input(&mut self, i: usize) -> TerminalResult<&dyn Input> {
+        // Safety check
+        if i >= self.inputs().len() {
+            return Err(TerminalError::NoInput(i));
+        }
+
+        // Signal unfocus previous input
+        if let Some(prev_index) = self.focused {
+            self.inputs[prev_index].unfocus();
+        }
+
+        self.focused = Some(i);
+        let input = self.inputs[i].as_mut();
+        input.focus();
+        Ok(input)
     }
+
+    /*
+
+
+    */
 }
 
 #[derive(Debug, thiserror::Error)]
