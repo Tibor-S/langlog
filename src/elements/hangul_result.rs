@@ -50,6 +50,12 @@ impl HangulResult {
         (self.syllable, overflow) = self.parser.parse_syllable(rr);
         self.overflow = overflow.into();
     }
+
+    pub fn clear(&mut self) {
+        self.overflow = String::new();
+        self.syllable = Syllable::default();
+        self.str = Hangul::default();
+    }
 }
 impl Block for HangulResult {
     fn pos(&self) -> (u16, u16, u16) {

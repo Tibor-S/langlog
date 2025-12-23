@@ -5,7 +5,7 @@ use terminal::{
 };
 
 use crate::elements::{
-    DescriptionInput, HangulResult, JamoInfo, PossibleInfo, RrInput,
+    DescriptionInput, HangulResult, JamoInfo, Log, PossibleInfo, RrInput,
 };
 
 /* All syllables take 2 columns
@@ -152,12 +152,13 @@ pub fn main_scene() -> TerminalResult<Scene> {
      * Info
      */
     {
+        const STR: &str = "Exit: ^q   Help: ^h   Menu: ^Space";
         scene.insert_block(
             "info".into(),
             TextLine::default()
                 .with_pos(1, 1)
-                .with_width("Exit: ^q    Command Menu: ^Space".len() as u16)
-                .with_value("Exit: ^q    Command Menu: ^Space".into())
+                .with_width(STR.len() as u16)
+                .with_value(STR.into())
                 .clone(),
         )?;
     }
@@ -172,11 +173,11 @@ pub fn main_scene() -> TerminalResult<Scene> {
     /*
      * rr
      */
-    {
-        let rr = RrInput::new(
+    let rr = {
+        let rr = Dispatch::from(RrInput::new(
             TextLine::default().with_pos(8, 5).with_width(31).clone(),
             hangul_result.clone(),
-        );
+        ));
         scene.insert_block(
             "rr-text".into(),
             TextLine::default()
@@ -185,8 +186,9 @@ pub fn main_scene() -> TerminalResult<Scene> {
                 .with_value("RR".into())
                 .clone(),
         )?;
-        scene.insert_input(rr);
-    }
+        scene.insert_input(rr.clone());
+        rr
+    };
     /*
      * Desc
      */
@@ -206,20 +208,37 @@ pub fn main_scene() -> TerminalResult<Scene> {
         d
     };
     /*
+     * Log
+     */
+    let entry_log = {
+        let l = Dispatch::from(
+            Log::new((42, 1, 0), 38, 29)
+                .with_input_pos((80, 30))
+                .clone(),
+        );
+        scene.insert_input(l.clone());
+        l
+    };
+    /*
      * SAVE
      */
     {
-        let hr = hangul_result.clone();
+        let rr = rr.clone();
         let di = description_input.clone();
+        let lg = entry_log.clone();
         let b = Button::new(
             (31, 9, 0),
             "SAVE".into(),
             8,
             2,
             Some(move || {
-                log::error!("hr: {}", hr.read().unwrap().str());
-                log::error!("di: {}\n", di.read().unwrap().value());
-                TerminalCode::None
+                lg.write().unwrap().insert_entry(
+                    rr.read().unwrap().hangul().read().unwrap().str().clone(),
+                    di.read().unwrap().value().to_string(),
+                );
+                rr.write().unwrap().clear();
+                di.write().unwrap().clear();
+                TerminalCode::Focus(0)
             }),
         );
         scene.insert_input(b);

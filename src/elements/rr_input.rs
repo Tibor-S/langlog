@@ -43,6 +43,15 @@ impl RrInput {
             hangul_result,
         }
     }
+
+    pub fn clear(&mut self) {
+        self.input.clear();
+        self.hangul_result.write().unwrap().clear()
+    }
+
+    pub fn hangul(&self) -> Dispatch<HangulResult> {
+        self.hangul_result.clone()
+    }
 }
 impl Block for RrInput {
     fn pos(&self) -> (u16, u16, u16) {
@@ -57,13 +66,6 @@ impl Block for RrInput {
         if i != 0 {
             return vec![];
         }
-        let mut error_range =
-            0..self.hangul_result.read().unwrap().overflow().len();
-        let diff =
-            (self.input.len() as usize).saturating_sub(error_range.len());
-        error_range.start += diff;
-        error_range.end += diff;
-
         let style = ContentStyle {
             foreground_color: Some(Color::Red),
             underline_color: Some(Color::Red),
@@ -73,6 +75,15 @@ impl Block for RrInput {
                 .with(Attribute::NotCrossedOut),
             ..Default::default()
         };
+        if self.input.prefix_overflow() {
+            return vec![(0..usize::MAX, style)];
+        }
+        let mut error_range =
+            0..self.hangul_result.read().unwrap().overflow().len();
+        let diff = (self.input.char_count() as usize)
+            .saturating_sub(error_range.len());
+        error_range.start += diff;
+        error_range.end += diff;
 
         vec![(error_range, style)]
     }

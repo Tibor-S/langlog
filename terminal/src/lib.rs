@@ -1,6 +1,6 @@
 pub mod code;
 pub mod elements;
-mod ext;
+pub mod ext;
 pub mod traits;
 pub use crossterm::event;
 pub use crossterm::style;
@@ -96,6 +96,12 @@ impl Terminal {
             self.focus_cursor(w)?;
             w.flush()?;
             match self.read()? {
+                TerminalCode::Focus(i) => {
+                    self.scene_mut().focus_input(i)?;
+                }
+                TerminalCode::FocusAt(pos) => {
+                    self.scene_mut().focus_input_at(pos)?;
+                }
                 TerminalCode::Exit => break,
                 _ => (),
             }

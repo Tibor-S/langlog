@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, isize, ops::Range};
+use std::{cmp::Ordering, isize, marker::PhantomData, ops::Range};
 
 /// # Range with mid
 /// ```
@@ -80,6 +80,61 @@ where
     }
     return first;
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Fork<Tr, Fa, R>
+where
+    Tr: Iterator<Item = R>,
+    Fa: Iterator<Item = R>,
+{
+    True(Tr, PhantomData<R>),
+    False(Fa, PhantomData<R>),
+}
+impl<Tr, Fa, R> Fork<Tr, Fa, R>
+where
+    Tr: Iterator<Item = R>,
+    Fa: Iterator<Item = R>,
+{
+    pub fn either<T, U>(check: bool, if_true: T, if_false: U) -> Self
+    where
+        T: IntoIterator<Item = R, IntoIter = Tr>,
+        U: IntoIterator<Item = R, IntoIter = Fa>,
+    {
+        if check {
+            Self::True(if_true.into_iter(), Default::default())
+        } else {
+            Self::False(if_false.into_iter(), Default::default())
+        }
+    }
+}
+impl<T, U, R> Iterator for Fork<T, U, R>
+where
+    T: Iterator<Item = R>,
+    U: Iterator<Item = R>,
+{
+    type Item = R;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Fork::True(iter, _) => iter.next(),
+            Fork::False(iter, _) => iter.next(),
+        }
+    }
+}
+pub trait IntoFork: Iterator {
+    fn fork_if<T>(
+        self,
+        check: bool,
+        if_true: T,
+    ) -> Fork<T::IntoIter, Self, Self::Item>
+    where
+        T: IntoIterator<Item = Self::Item>,
+        Self: Sized,
+    {
+        Fork::either(check, if_true, self)
+    }
+}
+impl<I: Iterator> IntoFork for I {}
 
 #[cfg(test)]
 mod tests {

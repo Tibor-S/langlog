@@ -1,9 +1,4 @@
-use crate::{
-    ext::Tree,
-    hangul::{Hangul, HangulResult},
-    jamo::Jamo,
-    syllable::Syllable,
-};
+use crate::{ext::Tree, jamo::Jamo, syllable::Syllable};
 
 pub type IsBreak = bool;
 #[derive(Debug)]
@@ -65,38 +60,6 @@ impl HangulParser {
         Self(tree)
     }
 
-    pub fn parse<'a>(
-        &self,
-        hangul: &mut Hangul,
-        input: &'a str,
-    ) -> HangulResult<&'a str> {
-        let mut pre = "";
-        let mut cur = input;
-        while pre != cur {
-            pre = cur;
-            cur = self.parse_token(hangul, cur)?;
-        }
-        Ok(cur)
-    }
-
-    pub fn parse_token<'a>(
-        &self,
-        hangul: &mut Hangul,
-        input: &'a str,
-    ) -> HangulResult<&'a str> {
-        match self.parse_jamo(input) {
-            (Some(j), false, ret) => {
-                hangul.push_back(j)?;
-                Ok(ret)
-            }
-            (Some(j), true, ret) => {
-                hangul.break_with(j)?;
-                Ok(ret)
-            }
-            (None, _, ret) => Ok(ret),
-        }
-    }
-
     pub fn parse_jamo<'a>(
         &self,
         input: &'a str,
@@ -145,10 +108,6 @@ impl HangulParser {
             i = pi;
         }
         (syl, i)
-    }
-
-    pub fn with_prefix(&self, token: &str) -> Vec<(String, Jamo)> {
-        self.0.with_prefix(token)
     }
 }
 impl Default for HangulParser {

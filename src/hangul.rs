@@ -8,7 +8,7 @@ use crate::{
     syllable::{Syllable, SyllableError},
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hangul(Vec<Syllable>);
 impl Hangul {
     pub fn push_back(&mut self, jamo: Jamo) -> HangulResult<()> {
@@ -29,6 +29,7 @@ impl Hangul {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn pop_back(&mut self) -> Option<Jamo> {
         match self.last_mut() {
             Some(syl) if syl.is_empty() => {
@@ -44,6 +45,7 @@ impl Hangul {
         }
     }
 
+    #[allow(dead_code)]
     pub fn break_with(&mut self, jamo: Jamo) -> HangulResult<()> {
         self.push(jamo.try_into()?);
         Ok(())
@@ -67,6 +69,30 @@ impl Display for Hangul {
             write!(f, "{}", syl)?;
         }
         Ok(())
+    }
+}
+impl From<Syllable> for Hangul {
+    fn from(value: Syllable) -> Self {
+        Self(vec![value])
+    }
+}
+impl From<&Syllable> for Hangul {
+    fn from(value: &Syllable) -> Self {
+        Self(vec![value.clone()])
+    }
+}
+impl TryFrom<Jamo> for Hangul {
+    type Error = HangulError;
+
+    fn try_from(value: Jamo) -> Result<Self, Self::Error> {
+        Ok(Self(vec![Syllable::try_from(value)?]))
+    }
+}
+impl TryFrom<&Jamo> for Hangul {
+    type Error = HangulError;
+
+    fn try_from(value: &Jamo) -> Result<Self, Self::Error> {
+        Ok(Self(vec![Syllable::try_from(value)?]))
     }
 }
 impl TryFrom<Vec<Jamo>> for Hangul {

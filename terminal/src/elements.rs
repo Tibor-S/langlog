@@ -13,7 +13,7 @@ use crossterm::{
 
 use crate::{
     code::TerminalCode,
-    ext::{range_with_mid, saturate_range},
+    ext::{IntoFork, range_with_mid, saturate_range},
     traits::{Block, Input},
 };
 
@@ -60,20 +60,29 @@ impl TextLine {
     pub fn with_value(&mut self, value: String) -> &mut Self {
         self.display_width = self.display_width.max(1);
         self.value = value;
-        self.index = self.len();
+        self.index = self.char_count() as u16;
         self
     }
 
+    pub fn clear(&mut self) {
+        self.index = 0;
+        self.value = String::new()
+    }
+
     pub fn display_range(&self) -> Range<usize> {
-        let len = self.len().min(self.display_width);
+        let len = self.char_count().min(self.display_width as usize);
         saturate_range(
             range_with_mid(self.index as isize, len as isize),
-            0..self.len() as usize,
+            0..self.char_count() as usize,
         )
     }
 
-    pub fn len(&self) -> u16 {
-        self.value.chars().count() as u16
+    pub fn prefix_overflow(&self) -> bool {
+        self.display_range().start > 0
+    }
+
+    pub fn char_count(&self) -> usize {
+        self.value.chars().count()
     }
 
     pub fn value(&self) -> &str {
@@ -93,7 +102,8 @@ impl Block for TextLine {
         /* EX:
          * display_width == 16
          * len() == 24 && value = "abcdefghijklmnopqrstuvwx"
-         *                               0123456789ABCDEFGHIJKLMN
+         *                         012345678901234567890123
+         *                                   1         2
          * self.index = 3
          * "abcdefghijklmno…"
          *     ^
@@ -104,27 +114,19 @@ impl Block for TextLine {
          * "…jklmnopqrstuvwx"
          *           ^
          */
-        let mut display_range = self.display_range();
-        if self.len() <= self.display_width {
-            Some(self.value.clone())
-        } else if display_range.start == 0 {
-            display_range.end -= 1;
-            let mut ret = String::from(&self.value[display_range]);
-            ret.push('…');
-            Some(ret)
-        } else if display_range.end == self.len() as usize {
-            display_range.start += 1;
-            let mut ret = String::from('…');
-            ret.extend(self.value[display_range].chars());
-            Some(ret)
-        } else {
-            display_range.start += 1;
-            display_range.end -= 1;
-            let mut ret = String::from('…');
-            ret.extend(self.value[display_range].chars());
-            ret.push('…');
-            Some(ret)
-        }
+        let display_range = self.display_range();
+        let display = self.value[display_range.clone()].chars();
+        let display = display.clone().fork_if(
+            display_range.start != 0,
+            Some('…').into_iter().chain(display.skip(1)),
+        );
+        let display = display.clone().fork_if(
+            display_range.end != self.char_count(),
+            display
+                .take(display_range.len().saturating_sub(1))
+                .chain(Some('…')),
+        );
+        Some(display.collect())
     }
 }
 
@@ -156,7 +158,7 @@ impl Input for TextLine {
                 ..
             } => {
                 self.index += 1;
-                self.index = self.index.min(self.len());
+                self.index = self.index.min(self.char_count() as u16);
                 TerminalCode::None
             }
             KeyEvent {
@@ -165,7 +167,7 @@ impl Input for TextLine {
                 modifiers: KeyModifiers::NONE,
                 ..
             } => {
-                if self.len() == 0 || self.index == 0 {
+                if self.char_count() == 0 || self.index == 0 {
                     TerminalCode::UnhandledKey(key)
                 } else {
                     self.index -= 1;
@@ -183,7 +185,7 @@ impl Input for TextLine {
 
     fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
         self.display_range()
-            .chain(Some(self.len() as usize))
+            .chain(Some(self.char_count() as usize))
             .enumerate()
             .find(|(_, el)| *el == self.index as usize)
             .map(|(i, _)| (i as u16, 0))
@@ -248,6 +250,14 @@ impl<I: Input> Input for Dispatch<I> {
 
     fn input_pos(&self) -> (u16, u16) {
         self.read().unwrap().input_pos()
+    }
+
+    fn focus(&mut self) {
+        self.0.write().unwrap().focus();
+    }
+
+    fn unfocus(&mut self) {
+        self.0.write().unwrap().unfocus();
     }
 }
 

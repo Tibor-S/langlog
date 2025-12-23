@@ -1,4 +1,8 @@
-use std::fmt::{Display, Write};
+use std::{
+    cmp::Ordering,
+    fmt::{Display, Write},
+    hash,
+};
 
 use crate::jamo::{FinalJamo, InitialJamo, Jamo, JamoError, MedialJamo};
 
@@ -16,7 +20,7 @@ pub enum State {
     End,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Syllable {
     initial: Option<InitialJamo>,
     medial: Option<MedialJamo>,
@@ -227,21 +231,17 @@ impl Syllable {
         }
     }
 }
-impl TryFrom<Syllable> for char {
-    type Error = ();
-
-    fn try_from(value: Syllable) -> Result<Self, ()> {
-        char::try_from(&value)
+impl From<Syllable> for char {
+    fn from(value: Syllable) -> Self {
+        char::from(&value)
     }
 }
-impl TryFrom<&Syllable> for char {
-    type Error = ();
-
-    fn try_from(value: &Syllable) -> Result<Self, ()> {
+impl From<&Syllable> for char {
+    fn from(value: &Syllable) -> Self {
         if let Some(ij) = value.initial
             && value.medial.is_none()
         {
-            Ok(Self::from(Jamo::from(ij)))
+            Self::from(Jamo::from(ij))
         } else if let Some(ij) = value.initial
             && let Some(mj) = value.medial
         {
@@ -253,9 +253,9 @@ impl TryFrom<&Syllable> for char {
 
             // Safety: all combinations of ini, med, fin are guaranteed to be
             // less than 0xD7A4
-            Ok(unsafe { char::from_u32_unchecked(unicode) })
+            unsafe { char::from_u32_unchecked(unicode) }
         } else {
-            Err(())
+            ' '
         }
     }
 }
@@ -285,12 +285,59 @@ impl TryFrom<Jamo> for Syllable {
         Ok(syl)
     }
 }
+impl TryFrom<&Jamo> for Syllable {
+    type Error = SyllableError;
+
+    fn try_from(value: &Jamo) -> SyllableResult<Self> {
+        let mut syl = Self::default();
+        syl.push(value.clone())?;
+        Ok(syl)
+    }
+}
+macro_rules! empty {
+    () => {
+        Syllable {
+            initial: None,
+            medial: None,
+            finale: None,
+        }
+    };
+}
+macro_rules! only_initial {
+    ($ij:pat) => {
+        Syllable {
+            initial: Some($ij),
+            medial: None,
+            finale: None,
+        }
+    };
+}
+impl Ord for Syllable {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (empty!(), empty!()) => Ordering::Equal,
+            (empty!(), _) => Ordering::Less,
+            (_, empty!()) => Ordering::Greater,
+            (only_initial!(ij1), only_initial!(ij2)) => ij1.cmp(ij2),
+            (only_initial!(_), _) => Ordering::Less,
+            (_, only_initial!(_)) => Ordering::Greater,
+            (s1, s2) => char::from(s1).cmp(&char::from(s2)),
+        }
+    }
+}
+impl PartialOrd for Syllable {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl hash::Hash for Syllable {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        char::from(self).hash(state);
+    }
+}
 impl Display for Syllable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match char::try_from(self) {
-            Ok(chr) => f.write_char(chr),
-            Err(_) => Ok(()),
-        }
+        f.write_char(self.into())
     }
 }
 
