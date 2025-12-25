@@ -4,8 +4,11 @@ use terminal::{
     elements::{Button, Dispatch, LineHorizontal, LineVertical, TextLine},
 };
 
-use crate::elements::{
-    DescriptionInput, HangulResult, JamoInfo, Log, PossibleInfo, RrInput,
+use crate::{
+    elements::{
+        DescriptionInput, HangulResult, JamoInfo, Log, PossibleInfo, RrInput,
+    },
+    scenes::error_popup_scene,
 };
 
 /* All syllables take 2 columns
@@ -44,7 +47,9 @@ use crate::elements::{
 30                                         +
 */
 
-pub fn main_scene() -> TerminalResult<Scene> {
+pub fn main_scene(
+    full_wh: (u16, u16),
+) -> TerminalResult<(Scene, Vec<(String, Scene)>)> {
     let mut scene = Scene::default();
     /*
      * Lines
@@ -93,7 +98,8 @@ pub fn main_scene() -> TerminalResult<Scene> {
         scene.insert_block(
             "hangul-left".into(),
             LineVertical::default()
-                .with_x(6)
+                .with_x(8)
+                .with_z_index(1)
                 .with_line_start(2)
                 .with_length(3)
                 .clone(),
@@ -126,6 +132,7 @@ pub fn main_scene() -> TerminalResult<Scene> {
             "desc-left".into(),
             LineVertical::default()
                 .with_x(6)
+                .with_z_index(1)
                 .with_line_start(6)
                 .with_length(3)
                 .clone(),
@@ -166,7 +173,15 @@ pub fn main_scene() -> TerminalResult<Scene> {
      * Hangul
      */
     let hangul_result = {
-        let h = Dispatch::from(HangulResult::new((8, 3, 0)));
+        scene.insert_block(
+            "hangul-text".into(),
+            TextLine::default()
+                .with_pos(1, 3)
+                .with_width(8)
+                .with_value("Hangul".into())
+                .clone(),
+        )?;
+        let h = Dispatch::from(HangulResult::new((10, 3, 0)));
         scene.insert_block("hangul".into(), h.clone())?;
         h
     };
@@ -227,11 +242,23 @@ pub fn main_scene() -> TerminalResult<Scene> {
         let di = description_input.clone();
         let lg = entry_log.clone();
         let b = Button::new(
-            (31, 9, 0),
+            (1, 9, 0),
             "SAVE".into(),
-            8,
-            2,
+            38,
+            17,
             Some(move || {
+                if rr.read().unwrap().hangul().read().unwrap().is_empty() {
+                    return TerminalCode::GoToScene(
+                        "empty-hangul-error".into(),
+                    );
+                }
+
+                if di.read().unwrap().value().is_empty() {
+                    return TerminalCode::GoToScene(
+                        "empty-description-error".into(),
+                    );
+                }
+
                 lg.write().unwrap().insert_entry(
                     rr.read().unwrap().hangul().read().unwrap().str().clone(),
                     di.read().unwrap().value().to_string(),
@@ -258,5 +285,21 @@ pub fn main_scene() -> TerminalResult<Scene> {
     {
         scene.insert_block("jamo-box".into(), JamoInfo::new((0, 15, 0)))?;
     }
-    Ok(scene)
+
+    let empty_hangul_error =
+        error_popup_scene(full_wh, "Hangul field is empty!".into(), &[], true)?;
+    let empty_description_error = error_popup_scene(
+        full_wh,
+        "Description field is empty!".into(),
+        &[],
+        true,
+    )?;
+
+    Ok((
+        scene,
+        vec![
+            ("empty-hangul-error".into(), empty_hangul_error),
+            ("empty-description-error".into(), empty_description_error),
+        ],
+    ))
 }

@@ -112,9 +112,9 @@ impl Input for RrInput {
                     .set_rr(self.input.value());
                 TerminalCode::None
             }
-            k @ TerminalCode::UnhandledKey(back_space!()) => {
+            c @ TerminalCode::UnhandledKey(back_space!()) => {
                 if self.hangul_result.read().unwrap().is_empty() {
-                    k
+                    c
                 } else {
                     self.hangul_result.write().unwrap().pop();
                     TerminalCode::None

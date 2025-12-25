@@ -6,6 +6,7 @@ pub use crossterm::event;
 pub use crossterm::style;
 use crossterm::style::StyledContent;
 
+use std::ops::Range;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -19,6 +20,7 @@ use crossterm::{
     queue, terminal,
 };
 
+use crate::ext::call_unary;
 use crate::{
     code::TerminalCode,
     ext::upper_bound,
@@ -53,17 +55,46 @@ macro_rules! back_tab {
     };
 }
 
-pub struct Terminal {
+pub struct Terminal<F = ()> {
     scenes: HashMap<String, Scene>,
     current_scene: String,
+    previous_scenes: Vec<String>,
+    last_full_scene: Vec<usize>,
+    key_listener: F,
 }
-impl Terminal {
-    pub fn new(scene_name: String, scene: Scene) -> Self {
+impl Terminal<()> {
+    pub fn new(
+        scene_name: String,
+        scene: Scene,
+    ) -> Terminal<impl Fn(KeyEvent) -> TerminalCode> {
         let mut scenes = HashMap::default();
         scenes.insert(scene_name.clone(), scene);
-        Self {
+        Terminal {
             scenes,
             current_scene: scene_name,
+            previous_scenes: Default::default(),
+            last_full_scene: Default::default(),
+            key_listener: |k| TerminalCode::UnhandledKey(k),
+        }
+    }
+}
+impl<F> Terminal<F>
+where
+    F: Fn(KeyEvent) -> TerminalCode,
+{
+    pub fn with_key_listener(
+        scene_name: String,
+        scene: Scene,
+        key_listener: F,
+    ) -> Self {
+        let mut scenes = HashMap::default();
+        scenes.insert(scene_name.clone(), scene);
+        Terminal {
+            scenes,
+            current_scene: scene_name,
+            previous_scenes: Default::default(),
+            last_full_scene: Default::default(),
+            key_listener,
         }
     }
 
@@ -92,10 +123,23 @@ impl Terminal {
                 terminal::Clear(terminal::ClearType::All),
                 cursor::MoveTo(0, 0)
             )?;
-            self.draw(w)?;
+            for previous_scene in self.previous_scenes
+                [self.draw_previous_range()]
+            .iter()
+            .filter_map(|name| self.scenes.get(name))
+            {
+                Self::draw(previous_scene, w)?;
+            }
+            Self::draw(self.scene(), w)?;
             self.focus_cursor(w)?;
             w.flush()?;
             match self.read()? {
+                TerminalCode::PreviousScene => {
+                    self.previous_scene();
+                }
+                TerminalCode::GoToScene(name) => {
+                    self.go_to_scene(name);
+                }
                 TerminalCode::Focus(i) => {
                     self.scene_mut().focus_input(i)?;
                 }
@@ -117,15 +161,40 @@ impl Terminal {
         Ok(())
     }
 
-    fn draw(&self, w: &mut Stdout) -> TerminalResult<()> {
-        let blocks = self.scene().blocks().iter().map(|b| b.as_ref()).chain(
-            self.scene()
-                .inputs()
-                .iter()
-                .map(|i| i.as_ref() as &dyn Block),
-        );
+    pub fn insert_scene(&mut self, name: String, scene: Scene) {
+        self.scenes.insert(name, scene);
+    }
+
+    pub fn go_to_scene(&mut self, scene: String) {
+        if self.current_scene == scene {
+            return;
+        }
+        if matches!(self.scene().ty, SceneType::Full) {
+            self.last_full_scene.push(self.previous_scenes.len());
+        }
+        self.previous_scenes.push(self.current_scene.clone());
+        self.current_scene = scene;
+    }
+
+    pub fn previous_scene(&mut self) {
+        if let Some(scene) = self.previous_scenes.pop() {
+            self.current_scene = scene;
+        }
+        if Some(self.previous_scenes.len()) == self.get_last_full_scene() {
+            self.last_full_scene.pop();
+        }
+    }
+
+    fn draw(scene: &Scene, w: &mut Stdout) -> TerminalResult<()> {
+        let (x, y) = scene.pos();
+        let blocks = scene
+            .blocks()
+            .iter()
+            .map(|b| b.as_ref())
+            .chain(scene.inputs().iter().map(|i| i.as_ref() as &dyn Block));
         for block in blocks {
-            let (x, y, _) = block.pos();
+            let (bx, by, _) = block.pos();
+            let (x, y) = (x + bx, y + by);
             queue!(w, cursor::MoveTo(x, y))?;
             let mut i = 0;
             while let Some(line) = block.rel_line(i) {
@@ -181,18 +250,33 @@ impl Terminal {
     }
 
     fn read(&mut self) -> TerminalResult<TerminalCode> {
-        match Self::read_key()? {
-            ctrl!('q') => Ok(TerminalCode::Exit),
+        // Terminal match
+        let code = match Self::read_key()? {
+            ctrl!('q') => TerminalCode::Exit,
             back_tab!() if !self.scene().inputs.is_empty() => self
                 .scene_mut()
                 .focus_prev_input()
-                .map(|_| TerminalCode::None),
+                .map(|_| TerminalCode::None)?,
             tab!() if !self.scene().inputs.is_empty() => self
                 .scene_mut()
                 .focus_next_input()
-                .map(|_| TerminalCode::None),
-            key => Ok(self.feed_focused(key)),
-        }
+                .map(|_| TerminalCode::None)?,
+            key => TerminalCode::UnhandledKey(key),
+        };
+        let key = match code {
+            TerminalCode::UnhandledKey(k) => k,
+            c => return Ok(c),
+        };
+
+        // Program match
+        let code = call_unary(&self.key_listener, key);
+        let key = match code {
+            TerminalCode::UnhandledKey(k) => k,
+            c => return Ok(c),
+        };
+
+        // Input match
+        Ok(self.feed_focused(key))
     }
 
     fn feed_focused(&mut self, key: KeyEvent) -> TerminalCode {
@@ -213,11 +297,20 @@ impl Terminal {
             }
         }
     }
+    fn get_last_full_scene(&self) -> Option<usize> {
+        self.last_full_scene.last().cloned()
+    }
+    fn draw_previous_range(&self) -> Range<usize> {
+        match self.last_full_scene.last() {
+            Some(&index) => index..self.previous_scenes.len(),
+            None => 0..0,
+        }
+    }
     fn stdout() -> Stdout {
         io::stdout()
     }
 }
-impl fmt::Debug for Terminal {
+impl<F> fmt::Debug for Terminal<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Terminal")
             .field("current_scene", &self.current_scene)
@@ -225,14 +318,28 @@ impl fmt::Debug for Terminal {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub enum SceneType {
+    #[default]
+    Full,
+    PopUp(u16, u16), // Position for pop-up, i.e, all blocks will be drawn relative to given position
+}
 #[derive(Default)]
 pub struct Scene {
     pub(crate) blocks: Vec<Box<dyn Block>>,
     pub(crate) inputs: Vec<Box<dyn Input>>,
     pub(crate) block_names: HashMap<String, usize>,
     pub(crate) focused: Option<usize>,
+    pub(crate) ty: SceneType,
 }
 impl Scene {
+    pub fn new(ty: SceneType) -> Self {
+        Self {
+            ty,
+            ..Default::default()
+        }
+    }
+
     pub fn blocks(&self) -> &[Box<dyn Block>] {
         &self.blocks
     }
@@ -247,6 +354,13 @@ impl Scene {
 
     pub fn focused(&self) -> Option<usize> {
         self.focused
+    }
+
+    pub fn pos(&self) -> (u16, u16) {
+        match self.ty {
+            SceneType::Full => (0, 0),
+            SceneType::PopUp(x, y) => (x, y),
+        }
     }
 }
 /// Block functions

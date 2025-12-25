@@ -43,7 +43,9 @@ impl HangulResult {
         self.str.push(self.syllable.clone());
     }
 
-    pub fn pop(&mut self) {}
+    pub fn pop(&mut self) {
+        self.str.pop();
+    }
 
     pub fn set_rr(&mut self, rr: &str) {
         let overflow;

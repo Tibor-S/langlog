@@ -13,6 +13,16 @@ pub trait Block {
         vec![]
     }
 }
+impl Block for () {
+    fn pos(&self) -> (u16, u16, u16) {
+        Default::default()
+    }
+
+    fn rel_line(&self, i: u16) -> Option<String> {
+        let _ = i;
+        Default::default()
+    }
+}
 
 pub trait Input: Block {
     /// Unavailable KeyEvents:
@@ -27,4 +37,17 @@ pub trait Input: Block {
     fn focus(&mut self) {}
     /// Called when element is unfocused
     fn unfocus(&mut self) {}
+}
+impl Input for () {
+    fn feed(&mut self, key: KeyEvent) -> TerminalCode {
+        TerminalCode::UnhandledKey(key)
+    }
+
+    fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
+        Default::default()
+    }
+
+    fn input_pos(&self) -> (u16, u16) {
+        Default::default()
+    }
 }
