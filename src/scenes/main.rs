@@ -47,9 +47,16 @@ use crate::{
 30                                         +
 */
 
+pub struct MainItems {
+    pub hangul_result: Dispatch<HangulResult>,
+    pub rr: Dispatch<RrInput>,
+    pub description_input: DescriptionInput,
+    pub log: Dispatch<Log>,
+}
+
 pub fn main_scene(
     full_wh: (u16, u16),
-) -> TerminalResult<(Scene, Vec<(String, Scene)>)> {
+) -> TerminalResult<(Scene, Vec<(String, Scene)>, MainItems)> {
     let mut scene = Scene::default();
     /*
      * Lines
@@ -301,5 +308,11 @@ pub fn main_scene(
             ("empty-hangul-error".into(), empty_hangul_error),
             ("empty-description-error".into(), empty_description_error),
         ],
+        MainItems {
+            hangul_result,
+            rr,
+            description_input,
+            log: entry_log,
+        },
     ))
 }

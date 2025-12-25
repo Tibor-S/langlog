@@ -137,8 +137,15 @@ where
                 TerminalCode::PreviousScene => {
                     self.previous_scene();
                 }
+                TerminalCode::PreviousSceneWithFocus(i) => {
+                    self.previous_scene();
+                    self.scene_mut().focus_input(i)?;
+                }
                 TerminalCode::GoToScene(name) => {
                     self.go_to_scene(name);
+                }
+                TerminalCode::ReplaceCurrentScene(name) => {
+                    self.current_scene = name
                 }
                 TerminalCode::Focus(i) => {
                     self.scene_mut().focus_input(i)?;
@@ -147,7 +154,7 @@ where
                     self.scene_mut().focus_input_at(pos)?;
                 }
                 TerminalCode::Exit => break,
-                _ => (),
+                TerminalCode::None | TerminalCode::UnhandledKey(_) => (),
             }
         }
 
@@ -240,9 +247,10 @@ where
             Some(input) => input,
             None => return Self::hide_cursor(w),
         };
+        let (x, y) = self.scene().pos();
         if let Some((rx, ry)) = input.rel_cursor_pos() {
-            let (x, y) = input.input_pos();
-            queue!(w, cursor::Show, cursor::MoveTo(x + rx, y + ry))
+            let (cx, cy) = (input.input_pos());
+            queue!(w, cursor::Show, cursor::MoveTo(x + rx + cx, y + ry + cy))
                 .map_err(TerminalError::from)
         } else {
             Self::hide_cursor(w)

@@ -70,6 +70,30 @@ impl Log {
         }
     }
 
+    pub fn remove_entry(&mut self, key: &Hangul) {
+        let current = self.current_entry().map(|c| c.0.clone());
+        match (current, self.entries.remove(key)) {
+            (Some(current), Some(_)) if current < *key => {
+                self.index.as_mut().map(|i| *i -= 1);
+            }
+            _ => (),
+        }
+    }
+
+    pub fn index_at(&mut self, key: &Hangul) -> bool {
+        let found =
+            self.entries.iter().enumerate().find_map(|(i, (k, _))| {
+                if *k == *key { Some(i) } else { None }
+            });
+        match found {
+            Some(i) => {
+                self.index = Some(i);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn current_entry(&self) -> Option<&(Hangul, TextLine)> {
         self.index.map(|i| self.entries.get(i)).unwrap_or(None)
     }
