@@ -2,6 +2,7 @@ use std::{
     char,
     collections::HashSet,
     fmt::{Debug, Display, Write},
+    mem::transmute,
 };
 
 /// ## Jamo
@@ -300,6 +301,18 @@ impl From<&Jamo> for char {
     fn from(value: &Jamo) -> Self {
         // Safe ! all variants of jamo have valid unicode values
         unsafe { char::from_u32_unchecked(*value as u32) }
+    }
+}
+impl TryFrom<char> for Jamo {
+    type Error = JamoError;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        let code = value as u16;
+        if Self::G as u16 <= code && code <= Self::I as u16 {
+            Ok(unsafe { transmute(code) })
+        } else {
+            Err(JamoError::InvalidChar(value))
+        }
     }
 }
 impl Debug for Jamo {
@@ -1135,6 +1148,8 @@ impl Display for FinalJamo {
 
 #[derive(Debug, thiserror::Error)]
 pub enum JamoError {
+    #[error("Can not represent {0} with Jamo")]
+    InvalidChar(char),
     #[error("Did not expect {0} <{0:?}>")]
     UnexpectedJamo(Jamo),
     #[error("Cannot combine {0} <{0:?}> with {1} <{1:?}>")]

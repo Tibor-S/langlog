@@ -3,9 +3,11 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     jamo::Jamo,
-    syllable::{Syllable, SyllableError},
+    syllable::{Syllable, SyllableError, SyllableResult},
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -71,6 +73,11 @@ impl Display for Hangul {
         Ok(())
     }
 }
+impl FromIterator<Syllable> for Hangul {
+    fn from_iter<T: IntoIterator<Item = Syllable>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
 impl From<Syllable> for Hangul {
     fn from(value: Syllable) -> Self {
         Self(vec![value])
@@ -104,6 +111,50 @@ impl TryFrom<Vec<Jamo>> for Hangul {
             hangul.push_back(j)?;
         }
         Ok(hangul)
+    }
+}
+impl<'a> TryFrom<&'a str> for Hangul {
+    type Error = HangulError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        value
+            .chars()
+            .map(|c| Ok(Syllable::try_from(c)?))
+            .collect::<HangulResult<Hangul>>()
+    }
+}
+impl From<Hangul> for String {
+    fn from(value: Hangul) -> Self {
+        value.iter().map(char::from).collect()
+    }
+}
+impl From<&Hangul> for String {
+    fn from(value: &Hangul) -> Self {
+        value.iter().map(char::from).collect()
+    }
+}
+impl Serialize for Hangul {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let as_string = String::from(self);
+        serializer.serialize_str(&as_string)
+    }
+}
+impl<'de> Deserialize<'de> for Hangul {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let as_string = <&str>::deserialize(deserializer)?;
+        match Hangul::try_from(as_string) {
+            Ok(h) => Ok(h),
+            Err(e) => {
+                log::error!("Could not deserialize Hangul!");
+                panic!("{}", e)
+            }
+        }
     }
 }
 

@@ -2,6 +2,7 @@ use std::{
     cmp::Ordering,
     fmt::{Display, Write},
     hash,
+    mem::transmute,
 };
 
 use crate::jamo::{FinalJamo, InitialJamo, Jamo, JamoError, MedialJamo};
@@ -294,6 +295,28 @@ impl TryFrom<&Jamo> for Syllable {
         Ok(syl)
     }
 }
+impl TryFrom<char> for Syllable {
+    type Error = SyllableError;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        let code = value as u16;
+        if code < 0xac00 || code > 0xd7a3 {
+            return Err(SyllableError::InvalidChar(value));
+        }
+
+        let code = code - 0xac00;
+        let ini = code / 588;
+        let code = code % 588;
+        let med = code / 28;
+        let code = code % 28;
+        let fin = if code == 0 { None } else { Some(code) };
+        Ok(Self {
+            initial: Some(unsafe { transmute(InitialJamo::G as u16 + ini) }),
+            medial: Some(unsafe { transmute(MedialJamo::A as u16 + med) }),
+            finale: fin.map(|f| unsafe { transmute(FinalJamo::G as u16 + f) }),
+        })
+    }
+}
 macro_rules! empty {
     () => {
         Syllable {
@@ -343,6 +366,8 @@ impl Display for Syllable {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyllableError {
+    #[error("Can not represent {0} with Syllable")]
+    InvalidChar(char),
     #[error("Expected Initial or Medial got: Jamo {0} <{0:?}>")]
     ExpectedInitialOrMedial(Jamo),
     #[error("Expected Medial got: Jamo {0} <{0:?}>")]
