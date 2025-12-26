@@ -150,16 +150,7 @@ impl Log {
 
         Ok(rdr
             .deserialize()
-            .filter_map(|res| {
-                log::debug!("res: {:?}", res);
-                match res {
-                    Ok(v) => Some(v),
-                    Err(e) => {
-                        log::error!("{}", e);
-                        None
-                    }
-                }
-            })
+            .filter_map(|res| res.ok())
             .collect::<Vec<_>>())
     }
 
