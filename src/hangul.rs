@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     jamo::Jamo,
-    syllable::{Syllable, SyllableError, SyllableResult},
+    syllable::{Syllable, SyllableError},
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]

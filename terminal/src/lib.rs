@@ -20,6 +20,7 @@ use crossterm::{
     queue, terminal,
 };
 
+use crate::ext::call_nullary;
 use crate::ext::call_unary;
 use crate::{
     code::TerminalCode,
@@ -55,37 +56,24 @@ macro_rules! back_tab {
     };
 }
 
-pub struct Terminal<F = ()> {
+pub struct Terminal<KL = (), SE = ()> {
     scenes: HashMap<String, Scene>,
     current_scene: String,
     previous_scenes: Vec<String>,
     last_full_scene: Vec<usize>,
-    key_listener: F,
+    key_listener: KL,
+    safe_exit: SE,
 }
-impl Terminal<()> {
+impl<KL, SE> Terminal<KL, SE>
+where
+    KL: Fn(KeyEvent) -> TerminalCode,
+    SE: Fn() -> TerminalResult<()>,
+{
     pub fn new(
         scene_name: String,
         scene: Scene,
-    ) -> Terminal<impl Fn(KeyEvent) -> TerminalCode> {
-        let mut scenes = HashMap::default();
-        scenes.insert(scene_name.clone(), scene);
-        Terminal {
-            scenes,
-            current_scene: scene_name,
-            previous_scenes: Default::default(),
-            last_full_scene: Default::default(),
-            key_listener: |k| TerminalCode::UnhandledKey(k),
-        }
-    }
-}
-impl<F> Terminal<F>
-where
-    F: Fn(KeyEvent) -> TerminalCode,
-{
-    pub fn with_key_listener(
-        scene_name: String,
-        scene: Scene,
-        key_listener: F,
+        key_listener: KL,
+        safe_exit: SE,
     ) -> Self {
         let mut scenes = HashMap::default();
         scenes.insert(scene_name.clone(), scene);
@@ -95,6 +83,7 @@ where
             previous_scenes: Default::default(),
             last_full_scene: Default::default(),
             key_listener,
+            safe_exit,
         }
     }
 
@@ -249,7 +238,7 @@ where
         };
         let (x, y) = self.scene().pos();
         if let Some((rx, ry)) = input.rel_cursor_pos() {
-            let (cx, cy) = (input.input_pos());
+            let (cx, cy) = input.input_pos();
             queue!(w, cursor::Show, cursor::MoveTo(x + rx + cx, y + ry + cy))
                 .map_err(TerminalError::from)
         } else {
@@ -260,7 +249,10 @@ where
     fn read(&mut self) -> TerminalResult<TerminalCode> {
         // Terminal match
         let code = match Self::read_key()? {
-            ctrl!('q') => TerminalCode::Exit,
+            ctrl!('q') => {
+                call_nullary(&self.safe_exit)?;
+                TerminalCode::Exit
+            }
             back_tab!() if !self.scene().inputs.is_empty() => self
                 .scene_mut()
                 .focus_prev_input()

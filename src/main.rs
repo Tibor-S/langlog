@@ -38,13 +38,21 @@ macro_rules! ctrl {
 fn main() -> TerminalResult<()> {
     pretty_env_logger::init();
     let (main_scene, scenes, MainItems { log, .. }) = main_scene((81, 31))?;
-    let mut term =
-        Terminal::with_key_listener("main".into(), main_scene, |k| match k {
+    let main_log = log.clone();
+    let mut term = Terminal::new(
+        "main".into(),
+        main_scene,
+        |k| match k {
             esc!() => TerminalCode::PreviousScene,
             ctrl!('h') => TerminalCode::GoToScene("help".into()),
             ctrl!(' ') => TerminalCode::GoToScene("menu".into()),
             _ => TerminalCode::UnhandledKey(k),
-        });
+        },
+        move || {
+            main_log.read().unwrap().save()?;
+            Ok(())
+        },
+    );
 
     for (name, scene) in scenes {
         term.insert_scene(name, scene);

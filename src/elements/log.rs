@@ -1,5 +1,7 @@
-use std::{cmp::Ordering, ops::Range};
+use std::{cmp::Ordering, env, io, ops::Range, path::PathBuf};
 
+use csv::{ReaderBuilder, WriterBuilder};
+use serde::{Deserialize, Serialize};
 use terminal::{
     code::TerminalCode,
     elements::TextLine,
@@ -11,6 +13,11 @@ use terminal::{
 
 use crate::{ext::OrderedMap, hangul::Hangul};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Row {
+    hangul: Hangul,
+    description: String,
+}
 #[derive(Debug, Clone)]
 pub struct Log {
     pos: (u16, u16, u16),
@@ -18,22 +25,49 @@ pub struct Log {
     width: u16,
     height: u16,
     entries: OrderedMap<Hangul, TextLine>,
-    index: Option<usize>,
+    index: usize,
     focused: bool,
 }
 impl Log {
     pub const ENTRY_HEIGHT: usize = 3; // Hangul \ Description \ Br
 
-    pub fn new(pos: (u16, u16, u16), width: u16, height: u16) -> Self {
-        Self {
+    pub fn new(
+        pos: (u16, u16, u16),
+        width: u16,
+        height: u16,
+    ) -> io::Result<Self> {
+        let entries: OrderedMap<Hangul, TextLine> =
+            match Self::get_csv_records() {
+                Ok(r) => r
+                    .into_iter()
+                    .map(|row| {
+                        (
+                            row.hangul,
+                            Self::new_description(width, row.description),
+                        )
+                    })
+                    .collect(),
+                Err(e) => {
+                    log::warn!("{}", e);
+                    Default::default()
+                }
+            };
+        Ok(Self {
             pos,
             input_pos: (pos.0, pos.1),
             width,
             height: height.saturating_sub(2),
-            index: None,
-            entries: Default::default(),
+            index: 0,
+            entries,
             focused: false,
-        }
+        })
+    }
+
+    pub fn save(&self) -> io::Result<()> {
+        Self::set_csv_records(self.entries.iter().map(|(h, d)| Row {
+            hangul: h.clone(),
+            description: d.value().to_string(),
+        }))
     }
 
     pub fn with_input_pos(&mut self, pos: (u16, u16)) -> &mut Self {
@@ -49,21 +83,15 @@ impl Log {
         let ordering = self.current_entry().map(|(k, _)| key.cmp(k));
         let replaced = self
             .entries
-            .insert(
-                key,
-                TextLine::default()
-                    .with_width(self.width)
-                    .with_value(description)
-                    .clone(),
-            )
+            .insert(key, Self::new_description(self.width, description))
             .map(|(k, v)| (k, v.value().to_string()));
         match (replaced, ordering) {
             (None, Some(Ordering::Less)) => {
-                self.index.as_mut().map(|i| *i += 1);
+                self.index += 1;
                 None
             }
             (ret, None) => {
-                self.index = Some(0);
+                self.index = 0;
                 ret
             }
             (ret, _) => ret,
@@ -74,7 +102,7 @@ impl Log {
         let current = self.current_entry().map(|c| c.0.clone());
         match (current, self.entries.remove(key)) {
             (Some(current), Some(_)) if current < *key => {
-                self.index.as_mut().map(|i| *i -= 1);
+                self.index -= 1;
             }
             _ => (),
         }
@@ -87,7 +115,7 @@ impl Log {
             });
         match found {
             Some(i) => {
-                self.index = Some(i);
+                self.index = i;
                 true
             }
             None => false,
@@ -95,11 +123,11 @@ impl Log {
     }
 
     pub fn current_entry(&self) -> Option<&(Hangul, TextLine)> {
-        self.index.map(|i| self.entries.get(i)).unwrap_or(None)
+        self.entries.get(self.index)
     }
 
-    pub fn line_index(&self) -> Option<usize> {
-        self.index.map(|i| i * Self::ENTRY_HEIGHT)
+    pub fn line_index(&self) -> usize {
+        self.index * Self::ENTRY_HEIGHT
     }
 
     pub fn line_count(&self) -> usize {
@@ -107,15 +135,59 @@ impl Log {
     }
 
     fn display_range(&self) -> Range<usize> {
-        let index = match self.line_index() {
-            Some(i) => i,
-            None => return 0..0,
-        };
+        let index = self.line_index();
         let len = self.line_count().min(self.height as usize);
         saturate_range(
             range_with_mid(index as isize, len as isize),
             0..self.line_count() as usize,
         )
+    }
+
+    fn get_csv_records() -> io::Result<Vec<Row>> {
+        let csv_path = Self::csv_path()?;
+        let mut rdr =
+            ReaderBuilder::new().delimiter(b';').from_path(csv_path)?;
+
+        Ok(rdr
+            .deserialize()
+            .filter_map(|res| {
+                log::debug!("res: {:?}", res);
+                match res {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        log::error!("{}", e);
+                        None
+                    }
+                }
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn set_csv_records(
+        entries: impl IntoIterator<Item = Row>,
+    ) -> io::Result<()> {
+        let csv_path = Self::csv_path()?;
+        let mut wtr = WriterBuilder::new()
+            .delimiter(b';')
+            .has_headers(true)
+            .from_path(csv_path)?;
+        for entry in entries {
+            wtr.serialize(entry)?;
+        }
+        Ok(())
+    }
+
+    fn csv_path() -> io::Result<PathBuf> {
+        let mut csv_file = env::current_dir()?.into_os_string();
+        csv_file.push("/hangul-log.csv");
+        Ok(csv_file.into())
+    }
+
+    fn new_description(width: u16, text: String) -> TextLine {
+        TextLine::default()
+            .with_width(width)
+            .with_value(text)
+            .clone()
     }
 }
 impl Block for Log {
@@ -164,10 +236,8 @@ impl Block for Log {
     }
 
     fn style_line(&self, i: u16) -> Vec<(Range<usize>, ContentStyle)> {
-        let foc = if self.focused
-            && let Some(index) = self.index
-        {
-            index
+        let foc = if self.focused {
+            self.index
         } else {
             return vec![];
         };
@@ -222,16 +292,11 @@ impl Input for Log {
     fn feed(&mut self, key: KeyEvent) -> TerminalCode {
         match key {
             up!() => {
-                self.index =
-                    Some(self.index.map(|i| i.saturating_sub(1)).unwrap_or(0));
+                self.index = self.index.saturating_sub(1);
                 TerminalCode::None
             }
             down!() => {
-                self.index = Some(
-                    self.index
-                        .map(|i| (i + 1).min(self.entries.len() - 1))
-                        .unwrap_or(0),
-                );
+                self.index = (self.index + 1).min(self.entries.len() - 1);
                 TerminalCode::None
             }
             _ => TerminalCode::UnhandledKey(key),

@@ -162,6 +162,9 @@ mod tests {
         );
     }
 }
+pub fn call_nullary<T, F: Fn() -> T>(f: &F) -> T {
+    f()
+}
 pub fn call_unary<T, U, F: Fn(T) -> U>(f: &F, arg: T) -> U {
     f(arg)
 }

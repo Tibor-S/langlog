@@ -214,3 +214,8 @@ impl<K, V> Default for OrderedMap<K, V> {
         Self(Default::default())
     }
 }
+impl<K, V> FromIterator<(K, V)> for OrderedMap<K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}

@@ -47,6 +47,7 @@ use crate::{
 30                                         +
 */
 
+#[allow(dead_code)]
 pub struct MainItems {
     pub hangul_result: Dispatch<HangulResult>,
     pub rr: Dispatch<RrInput>,
@@ -234,7 +235,7 @@ pub fn main_scene(
      */
     let entry_log = {
         let l = Dispatch::from(
-            Log::new((42, 1, 0), 38, 29)
+            Log::new((42, 1, 0), 38, 29)?
                 .with_input_pos((80, 30))
                 .clone(),
         );
