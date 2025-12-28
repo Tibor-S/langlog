@@ -9,7 +9,7 @@ use std::{
 use terminal::{Terminal, TerminalError, TerminalResult, code::TerminalCode};
 
 use crate::{
-    database::{Database, DatabaseError},
+    database::{Database, DatabaseError, SignInAttempt},
     scenes::{MainItems, help_menu_scene, main_scene, menu_scene},
 };
 
@@ -51,8 +51,23 @@ async fn main() -> LanglogResult<()> {
 
     let db = Database::new(&host.user, &host.password, &host.ip).await?;
     log::debug!("{:?}", db.sign_up("frisco", "1234").await?);
-    let account = db.sign_in("frisco", "1234").await?;
+    let account = match db.sign_in("frisco", "1234").await? {
+        SignInAttempt::Success(a) => a,
+        SignInAttempt::Failed(db) => panic!("lol"),
+    };
     log::debug!("{:?}", account);
+    for e in account.all_rows().await? {
+        log::debug!("{}: {}", e.hangul(), e.description())
+    }
+    account.insert_row("ne", "yes").await?;
+    for e in account.all_rows().await? {
+        log::debug!("{}: {}", e.hangul(), e.description())
+    }
+    account.delete_row("ne").await?;
+    for e in account.all_rows().await? {
+        log::debug!("{}: {}", e.hangul(), e.description())
+    }
+
     // Assuming char is 1:2
     // 4:3 becomes 8:3
     let (main_scene, scenes, MainItems { log, .. }) = main_scene((81, 31))?;

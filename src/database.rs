@@ -23,12 +23,14 @@ macro_rules! create_table_hangul_log {
             "create table if not exists hangul_log (
                 hangul_log_id bigserial primary key,
                 account_id bigint not null,
-                hangul text unique,
+                hangul text,
                 description text,
                 constraint hangul_log_to_account
                     foreign key (account_id)
                     references account (account_id)
-                    on delete cascade
+                    on delete cascade,
+                constraint hangul_log_hangul_unique_with_account
+                    unique (account_id, hangul)
             )",
         )
         .execute($executor)
@@ -71,12 +73,118 @@ macro_rules! insert_account_row {
         .execute($executor)
     };
 }
+macro_rules! select_account_id_hangul_log {
+    ($executor:expr, $account_id:expr) => {
+        sqlx::query_as(&format!(
+            "select hangul_log_id, hangul, description
+                from hangul_log
+                where account_id = {}
+            ",
+            $account_id
+        ))
+        .fetch_all($executor)
+    };
+}
+macro_rules! exists_hangul_log_account_hangul {
+    ($executor:expr, $account_id:expr, $hangul:expr) => {
+        sqlx::query_as(&format!(
+            "select exists (
+                select 1
+                from hangul_log
+                where account_id = {}
+                    and hangul = '{}'
+            ) as exists",
+            $account_id, $hangul
+        ))
+        .fetch_one($executor)
+    };
+}
+macro_rules! insert_hangul_log_row {
+    ($executor:expr, $account_id:expr, $hangul:expr, $description:expr) => {
+        sqlx::query(&format!(
+            "insert into hangul_log (account_id, hangul, description)
+                values ({}, '{}', '{}')
+            ",
+            $account_id, $hangul, $description
+        ))
+        .execute($executor)
+    };
+}
+macro_rules! delete_hangul_log_row {
+    ($executor:expr, $account_id:expr, $hangul:expr) => {
+        sqlx::query(&format!(
+            "delete from hangul_log
+                where account_id = {}
+                    and hangul = '{}'
+            ",
+            $account_id, $hangul
+        ))
+        .execute($executor)
+    };
+}
 
 #[derive(Debug, Clone)]
 pub struct Account {
     account_id: i64,
     username: String,
     db: Database,
+}
+
+impl Account {
+    pub fn username(&self) -> &str {
+        &self.username
+    }
+
+    pub async fn all_rows(&self) -> DatabaseResult<Vec<HangulLogRow>> {
+        select_account_id_hangul_log(&self.db.pool, self.account_id)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    pub async fn insert_row(
+        &self,
+        hangul: &str,
+        description: &str,
+    ) -> DatabaseResult<bool> {
+        if exists_hangul_log_account_hangul(
+            &self.db.pool,
+            self.account_id,
+            hangul,
+        )
+        .await?
+        {
+            return Ok(false);
+        }
+        match insert_hangul_log_row(
+            &self.db.pool,
+            self.account_id,
+            hangul,
+            description,
+        )
+        .await
+        {
+            Ok(()) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn delete_row(&self, hangul: &str) -> DatabaseResult<bool> {
+        if !exists_hangul_log_account_hangul(
+            &self.db.pool,
+            self.account_id,
+            hangul,
+        )
+        .await?
+        {
+            return Ok(false);
+        }
+        match delete_hangul_log_row(&self.db.pool, self.account_id, hangul)
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -103,7 +211,7 @@ impl Database {
             .max_connections(5)
             .connect(&url)
             .await?;
-        Self::create_tables(&pool).await?;
+        create_tables(&pool).await?;
 
         Ok(Self { pool })
     }
@@ -113,8 +221,7 @@ impl Database {
         username: &str,
         password: &str,
     ) -> DatabaseResult<SignInAttempt> {
-        let row =
-            Self::select_account_row(&self.pool, username, password).await?;
+        let row = select_account_row(&self.pool, username, password).await?;
         Ok(match row {
             Some(AccountRow {
                 account_id,
@@ -132,65 +239,30 @@ impl Database {
         &self,
         username: &str,
         password: &str,
-    ) -> DatabaseResult<SignUpAttempt> {
-        if Self::exists_account_username(&self.pool, username).await? {
-            return Ok(SignUpAttempt::Failed);
+    ) -> DatabaseResult<bool> {
+        if exists_account_username(&self.pool, username).await? {
+            return Ok(false);
         }
-        match Self::insert_account_row(&self.pool, username, password).await {
-            Ok(()) => Ok(SignUpAttempt::Success),
+        match insert_account_row(&self.pool, username, password).await {
+            Ok(()) => Ok(true),
             Err(e) => Err(e),
         }
     }
+}
 
-    async fn create_tables<'a, E>(executor: E) -> DatabaseResult<()>
-    where
-        E: Executor<'a, Database = Postgres> + Copy,
-    {
-        create_table_account!(executor).await?;
-        create_table_hangul_log!(executor).await?;
-        Ok(())
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct HangulLogRow {
+    hangul_log_id: i64,
+    hangul: String,
+    description: String,
+}
+impl HangulLogRow {
+    pub fn hangul(&self) -> &str {
+        &self.hangul
     }
 
-    async fn select_account_row<'a, E, U, P>(
-        executor: E,
-        username: U,
-        password: P,
-    ) -> DatabaseResult<Option<AccountRow>>
-    where
-        E: Executor<'a, Database = Postgres> + Copy,
-        U: fmt::Display,
-        P: fmt::Display,
-    {
-        select_account_row!(executor, username, password)
-            .await
-            .map_err(DatabaseError::from)
-    }
-
-    async fn exists_account_username<'a, E, U>(
-        executor: E,
-        username: U,
-    ) -> DatabaseResult<bool>
-    where
-        E: Executor<'a, Database = Postgres> + Copy,
-        U: fmt::Display,
-    {
-        let Exists { exists } =
-            exists_account_username!(executor, username).await?;
-        Ok(exists)
-    }
-
-    async fn insert_account_row<'a, E, U, P>(
-        executor: E,
-        username: U,
-        password: P,
-    ) -> DatabaseResult<()>
-    where
-        E: Executor<'a, Database = Postgres> + Copy,
-        U: fmt::Display,
-        P: fmt::Display,
-    {
-        insert_account_row!(executor, username, password).await?;
-        Ok(())
+    pub fn description(&self) -> &str {
+        &self.description
     }
 }
 
@@ -198,12 +270,6 @@ impl Database {
 pub enum SignInAttempt {
     Success(Account),
     Failed(Database),
-}
-
-#[derive(Debug, Clone)]
-pub enum SignUpAttempt {
-    Success,
-    Failed,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -215,6 +281,110 @@ struct AccountRow {
 #[derive(Debug, Clone, Copy, sqlx::FromRow)]
 struct Exists {
     exists: bool,
+}
+
+async fn create_tables<'a, E>(executor: E) -> DatabaseResult<()>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+{
+    create_table_account!(executor).await?;
+    create_table_hangul_log!(executor).await?;
+    Ok(())
+}
+
+async fn select_account_row<'a, E, U, P>(
+    executor: E,
+    username: U,
+    password: P,
+) -> DatabaseResult<Option<AccountRow>>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    U: fmt::Display,
+    P: fmt::Display,
+{
+    select_account_row!(executor, username, password)
+        .await
+        .map_err(DatabaseError::from)
+}
+
+async fn exists_account_username<'a, E, U>(
+    executor: E,
+    username: U,
+) -> DatabaseResult<bool>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    U: fmt::Display,
+{
+    let Exists { exists } =
+        exists_account_username!(executor, username).await?;
+    Ok(exists)
+}
+
+async fn insert_account_row<'a, E, U, P>(
+    executor: E,
+    username: U,
+    password: P,
+) -> DatabaseResult<()>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    U: fmt::Display,
+    P: fmt::Display,
+{
+    insert_account_row!(executor, username, password).await?;
+    Ok(())
+}
+
+async fn select_account_id_hangul_log<'a, E>(
+    executor: E,
+    account_id: i64,
+) -> DatabaseResult<Vec<HangulLogRow>>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+{
+    select_account_id_hangul_log!(executor, account_id)
+        .await
+        .map_err(DatabaseError::from)
+}
+
+async fn exists_hangul_log_account_hangul<'a, E, H>(
+    executor: E,
+    account_id: i64,
+    hangul: H,
+) -> DatabaseResult<bool>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    H: fmt::Display,
+{
+    let Exists { exists } =
+        exists_hangul_log_account_hangul!(executor, account_id, hangul).await?;
+    Ok(exists)
+}
+
+async fn insert_hangul_log_row<'a, E, H, D>(
+    executor: E,
+    account_id: i64,
+    hangul: H,
+    description: D,
+) -> DatabaseResult<()>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    H: fmt::Display,
+    D: fmt::Display,
+{
+    insert_hangul_log_row!(executor, account_id, hangul, description).await?;
+    Ok(())
+}
+async fn delete_hangul_log_row<'a, E, H>(
+    executor: E,
+    account_id: i64,
+    hangul: H,
+) -> DatabaseResult<()>
+where
+    E: Executor<'a, Database = Postgres> + Copy,
+    H: fmt::Display,
+{
+    delete_hangul_log_row!(executor, account_id, hangul).await?;
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
