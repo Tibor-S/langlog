@@ -9,15 +9,15 @@ use std::{
 use terminal::{Terminal, TerminalError, TerminalResult, code::TerminalCode};
 
 use crate::{
-    database::{Database, DatabaseError, SignInAttempt},
+    host::database::{Database, DatabaseError, SignInAttempt},
     scenes::{MainItems, help_menu_scene, main_scene, menu_scene},
 };
 
-mod database;
 mod elements;
 mod ext;
 mod hangul;
 mod hangul_parser;
+mod host;
 mod jamo;
 mod scenes;
 mod syllable;
