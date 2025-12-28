@@ -59,7 +59,7 @@ impl Default for Terminal {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TerminalError {
-    #[error(transparent)]
+    #[error("{0}")]
     IO(#[from] io::Error),
 }
 pub type TerminalResult<T> = Result<T, TerminalError>;

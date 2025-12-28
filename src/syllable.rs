@@ -372,7 +372,7 @@ pub enum SyllableError {
     ExpectedInitialOrMedial(Jamo),
     #[error("Expected Medial got: Jamo {0} <{0:?}>")]
     ExpectedMedial(Jamo),
-    #[error(transparent)]
+    #[error("{0}")]
     Jamo(#[from] JamoError),
 }
 pub type SyllableResult<T> = Result<T, SyllableError>;

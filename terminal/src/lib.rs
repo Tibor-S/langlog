@@ -558,7 +558,7 @@ pub enum TerminalError {
     NoInputAt((u16, u16)),
     #[error("Name already exists: {0}")]
     NameExists(String),
-    #[error(transparent)]
+    #[error("{0}")]
     IO(#[from] io::Error),
 }
 pub type TerminalResult<T> = Result<T, TerminalError>;

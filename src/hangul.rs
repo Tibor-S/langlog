@@ -160,7 +160,7 @@ impl<'de> Deserialize<'de> for Hangul {
 
 #[derive(Debug, thiserror::Error)]
 pub enum HangulError {
-    #[error(transparent)]
+    #[error("{0}")]
     Syllable(#[from] SyllableError),
 }
 pub type HangulResult<T> = Result<T, HangulError>;
