@@ -1,9 +1,7 @@
 use std::fmt::{self};
 
-use sqlx::{
-    Executor, FromRow, PgPool, Postgres,
-    postgres::{PgDatabaseError, PgPoolOptions},
-};
+use serde::{Deserialize, Serialize};
+use sqlx::{Executor, PgPool, Postgres, postgres::PgPoolOptions};
 
 macro_rules! create_table_account {
     ($executor:expr) => {
@@ -123,68 +121,10 @@ macro_rules! delete_hangul_log_row {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     account_id: i64,
     username: String,
-    db: Database,
-}
-
-impl Account {
-    pub fn username(&self) -> &str {
-        &self.username
-    }
-
-    pub async fn all_rows(&self) -> DatabaseResult<Vec<HangulLogRow>> {
-        select_account_id_hangul_log(&self.db.pool, self.account_id)
-            .await
-            .map_err(DatabaseError::from)
-    }
-
-    pub async fn insert_row(
-        &self,
-        hangul: &str,
-        description: &str,
-    ) -> DatabaseResult<bool> {
-        if exists_hangul_log_account_hangul(
-            &self.db.pool,
-            self.account_id,
-            hangul,
-        )
-        .await?
-        {
-            return Ok(false);
-        }
-        match insert_hangul_log_row(
-            &self.db.pool,
-            self.account_id,
-            hangul,
-            description,
-        )
-        .await
-        {
-            Ok(()) => Ok(true),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub async fn delete_row(&self, hangul: &str) -> DatabaseResult<bool> {
-        if !exists_hangul_log_account_hangul(
-            &self.db.pool,
-            self.account_id,
-            hangul,
-        )
-        .await?
-        {
-            return Ok(false);
-        }
-        match delete_hangul_log_row(&self.db.pool, self.account_id, hangul)
-            .await
-        {
-            Ok(()) => Ok(true),
-            Err(e) => Err(e),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -217,21 +157,20 @@ impl Database {
     }
 
     pub async fn sign_in(
-        self,
+        &self,
         username: &str,
         password: &str,
-    ) -> DatabaseResult<SignInAttempt> {
+    ) -> DatabaseResult<Option<Account>> {
         let row = select_account_row(&self.pool, username, password).await?;
         Ok(match row {
             Some(AccountRow {
                 account_id,
                 username,
-            }) => SignInAttempt::Success(Account {
+            }) => Some(Account {
                 account_id,
                 username,
-                db: self,
             }),
-            None => SignInAttempt::Failed(self),
+            None => None,
         })
     }
 
@@ -248,30 +187,73 @@ impl Database {
             Err(e) => Err(e),
         }
     }
+
+    pub async fn log_all_rows(
+        &self,
+        account: &Account,
+    ) -> DatabaseResult<Vec<HangulLogRow>> {
+        select_account_id_hangul_log(&self.pool, account.account_id)
+            .await
+            .map_err(DatabaseError::from)
+    }
+
+    pub async fn log_insert_row(
+        &self,
+        account: &Account,
+        hangul: &str,
+        description: &str,
+    ) -> DatabaseResult<bool> {
+        if exists_hangul_log_account_hangul(
+            &self.pool,
+            account.account_id,
+            hangul,
+        )
+        .await?
+        {
+            return Ok(false);
+        }
+        match insert_hangul_log_row(
+            &self.pool,
+            account.account_id,
+            hangul,
+            description,
+        )
+        .await
+        {
+            Ok(()) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn log_delete_row(
+        &self,
+        account: &Account,
+        hangul: &str,
+    ) -> DatabaseResult<bool> {
+        if !exists_hangul_log_account_hangul(
+            &self.pool,
+            account.account_id,
+            hangul,
+        )
+        .await?
+        {
+            return Ok(false);
+        }
+        match delete_hangul_log_row(&self.pool, account.account_id, hangul)
+            .await
+        {
+            Ok(()) => Ok(true),
+            Err(e) => Err(e),
+        }
+    }
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 pub struct HangulLogRow {
     hangul_log_id: i64,
     hangul: String,
     description: String,
 }
-impl HangulLogRow {
-    pub fn hangul(&self) -> &str {
-        &self.hangul
-    }
-
-    pub fn description(&self) -> &str {
-        &self.description
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum SignInAttempt {
-    Success(Account),
-    Failed(Database),
-}
-
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct AccountRow {
     account_id: i64,

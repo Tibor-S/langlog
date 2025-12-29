@@ -2,14 +2,13 @@
 
 use std::{
     env,
-    fmt::{self, Write, format},
-    usize,
+    fmt::{self},
 };
 
-use terminal::{Terminal, TerminalError, TerminalResult, code::TerminalCode};
+use terminal::{Terminal, TerminalError, code::TerminalCode};
 
 use crate::{
-    host::database::{Database, DatabaseError, SignInAttempt},
+    host::{Host, HostError},
     scenes::{MainItems, help_menu_scene, main_scene, menu_scene},
 };
 
@@ -49,24 +48,28 @@ async fn main() -> LanglogResult<()> {
     let arguments = Arguments::new()?;
     let host = arguments.host.unwrap();
 
-    let db = Database::new(&host.user, &host.password, &host.ip).await?;
-    log::debug!("{:?}", db.sign_up("frisco", "1234").await?);
-    let account = match db.sign_in("frisco", "1234").await? {
-        SignInAttempt::Success(a) => a,
-        SignInAttempt::Failed(db) => panic!("lol"),
-    };
-    log::debug!("{:?}", account);
-    for e in account.all_rows().await? {
-        log::debug!("{}: {}", e.hangul(), e.description())
-    }
-    account.insert_row("ne", "yes").await?;
-    for e in account.all_rows().await? {
-        log::debug!("{}: {}", e.hangul(), e.description())
-    }
-    account.delete_row("ne").await?;
-    for e in account.all_rows().await? {
-        log::debug!("{}: {}", e.hangul(), e.description())
-    }
+    host::serve(&host).await?;
+    // return Ok(());
+
+    // let db = Database::new(&host.pg_user, &host.pg_password, &host.database_ip)
+    //     .await?;
+    // log::debug!("{:?}", db.sign_up("frisco", "1234").await?);
+    // let account = match db.sign_in("frisco", "1234").await? {
+    //     Some(a) => a,
+    //     None => panic!("lol"),
+    // };
+    // log::debug!("{:?}", account);
+    // for e in db.all_rows(&account).await? {
+    //     log::debug!("{}: {}", e.hangul(), e.description())
+    // }
+    // db.insert_row(&account, "ne", "yes").await?;
+    // for e in db.all_rows(&account).await? {
+    //     log::debug!("{}: {}", e.hangul(), e.description())
+    // }
+    // db.delete_row(&account, "ne").await?;
+    // for e in db.all_rows(&account).await? {
+    //     log::debug!("{}: {}", e.hangul(), e.description())
+    // }
 
     // Assuming char is 1:2
     // 4:3 becomes 8:3
@@ -119,7 +122,8 @@ struct ArgumentsBuilder {
     is_host: bool,
     user: Option<String>,
     password: Option<String>,
-    ip: Option<String>,
+    database: Option<String>,
+    listening: Option<String>,
     path: String,
 }
 impl ArgumentsBuilder {
@@ -130,7 +134,8 @@ impl ArgumentsBuilder {
                 self.is_host,
                 self.user,
                 self.password,
-                self.ip,
+                self.database,
+                self.listening,
             )?,
         })
     }
@@ -151,9 +156,14 @@ impl ArgumentsBuilder {
             ArgRef::Long("password", Some(p)) => {
                 self.password = Some(p.to_string())
             }
-            ArgRef::Long("ip", Some(i)) => self.ip = Some(i.to_string()),
+            ArgRef::Long("database", Some(d)) => {
+                self.database = Some(d.to_string())
+            }
+            ArgRef::Long("listening", Some(l)) => {
+                self.listening = Some(l.to_string())
+            }
             _ => {
-                return Err(LanglogError::UnknownArgument(format!("{}", arg)));
+                return Err(LanglogError::UnknownArgument(arg.clone()));
             }
         };
         Ok(())
@@ -163,16 +173,21 @@ impl ArgumentsBuilder {
         is_host: bool,
         user: Option<String>,
         password: Option<String>,
-        ip: Option<String>,
+        database: Option<String>,
+        listening: Option<String>,
     ) -> LanglogResult<Option<Host>> {
-        match (is_host, user, password, ip) {
-            (false, _, _, _) => Ok(None),
-            (true, Some(user), Some(password), Some(ip)) => {
-                Ok(Some(Host { user, password, ip }))
+        match (is_host, user, password, database, listening) {
+            (false, _, _, _, _) => Ok(None),
+            (true, Some(user), Some(password), database, listening) => {
+                Ok(Some(Host {
+                    pg_user: user,
+                    pg_password: password,
+                    database_ip: database.unwrap_or("localhost".into()),
+                    listening_ip: listening.unwrap_or("localhost:8080".into()),
+                }))
             }
-            (true, None, _, _) => Err(LanglogError::MissingUser),
-            (true, _, None, _) => Err(LanglogError::MissingPassword),
-            (true, _, _, None) => Err(LanglogError::MissingIp),
+            (true, None, _, _, _) => Err(LanglogError::MissingUser),
+            (true, _, None, _, _) => Err(LanglogError::MissingPassword),
         }
     }
 
@@ -201,7 +216,7 @@ impl ArgumentsBuilder {
     }
 }
 #[derive(Debug, Clone)]
-enum Arg {
+pub enum Arg {
     // -<a>
     Short(char),
     // --<arg>[=<val>]
@@ -235,28 +250,19 @@ impl fmt::Display for Arg {
         Ok(())
     }
 }
-#[derive(Debug, Clone)]
-struct Host {
-    pub user: String,
-    pub password: String,
-    pub ip: String,
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum LanglogError {
     #[error("Using -h but no --user was provided")]
     MissingUser,
     #[error("Using -h but no --password was provided")]
     MissingPassword,
-    #[error("Using -h but no --ip was provided")]
-    MissingIp,
     #[error("Unknown argument: {0}")]
-    UnknownArgument(String),
+    UnknownArgument(Arg),
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
     #[error("{0}")]
     Terminal(#[from] TerminalError),
     #[error("{0}")]
-    Database(#[from] DatabaseError),
+    Host(#[from] HostError),
 }
 pub type LanglogResult<T> = Result<T, LanglogError>;
