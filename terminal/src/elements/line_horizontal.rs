@@ -2,8 +2,8 @@ use crate::traits::Block;
 
 #[derive(Debug, Clone, Default)]
 pub struct LineHorizontal {
-    pos: (u16, u16, u16),
-    length: u16,
+    pub pos: (u16, u16, u16),
+    pub length: u16,
 }
 impl LineHorizontal {
     pub fn with_y(&mut self, y: u16) -> &mut Self {

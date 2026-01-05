@@ -31,7 +31,7 @@ pub fn menu_scene(
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
         "background".into(),
-        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true),
+        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true, None),
     )?;
     scene.insert_block(
         "heading".into(),
@@ -84,7 +84,7 @@ fn find_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
         "background".into(),
-        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true),
+        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true, None),
     )?;
     scene.insert_block(
         "heading".into(),
@@ -152,7 +152,7 @@ fn delete_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
         "background".into(),
-        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true),
+        Rectangle::new((0, 0, 0), (WIDTH, HEIGHT), true, None),
     )?;
     scene.insert_block(
         "heading".into(),

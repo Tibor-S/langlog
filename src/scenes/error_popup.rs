@@ -29,7 +29,7 @@ pub fn error_popup_scene(
     let mut scene = Scene::new(SceneType::PopUp(x, y));
     scene.insert_block(
         "background".into(),
-        Rectangle::new((0, 0, 0), (width, height), bordered),
+        Rectangle::new((0, 0, 0), (width, height), bordered, None),
     )?;
 
     let hx = (width / 2).saturating_sub(heading.len() as u16 / 2);

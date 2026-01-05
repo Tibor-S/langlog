@@ -10,10 +10,10 @@ use crate::{
 
 #[derive(Debug, Default, Clone)]
 pub struct TextLine {
-    pos: (u16, u16, u16),
-    display_width: u16,
-    index: u16,
-    value: String,
+    pub pos: (u16, u16, u16),
+    pub display_width: u16,
+    pub index: u16,
+    pub value: String,
 }
 impl TextLine {
     pub fn with_pos(&mut self, x: u16, y: u16) -> &mut Self {

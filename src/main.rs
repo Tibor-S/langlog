@@ -9,7 +9,7 @@ use terminal::{Terminal, TerminalError, code::TerminalCode};
 
 use crate::{
     host::{Host, HostError},
-    scenes::{MainItems, help_menu_scene, main_scene, menu_scene},
+    scenes::{MainItems, help_menu_scene, main_scene, menu_scene, setup_scene},
 };
 
 mod elements;
@@ -44,11 +44,11 @@ macro_rules! ctrl {
 
 #[tokio::main]
 async fn main() -> LanglogResult<()> {
-    pretty_env_logger::init();
-    let arguments = Arguments::new()?;
-    let host = arguments.host.unwrap();
+    // pretty_env_logger::init();
+    // let arguments = Arguments::new()?;
+    // let host = arguments.host.unwrap();
 
-    host::serve(&host).await?;
+    // host::serve(&host).await?;
     // return Ok(());
 
     // let db = Database::new(&host.pg_user, &host.pg_password, &host.database_ip)
@@ -75,6 +75,7 @@ async fn main() -> LanglogResult<()> {
     // 4:3 becomes 8:3
     let (main_scene, scenes, MainItems { log, .. }) = main_scene((81, 31))?;
     let main_log = log.clone();
+    let (main_scene, scenes, _) = setup_scene()?;
     let mut term = Terminal::new(
         "main".into(),
         main_scene,

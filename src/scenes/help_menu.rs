@@ -7,7 +7,7 @@ pub fn help_menu_scene() -> TerminalResult<Scene> {
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
         "background".into(),
-        Rectangle::new((0, 0, 0), (57, 21), true),
+        Rectangle::new((0, 0, 0), (57, 21), true, None),
     )?;
     scene.insert_block(
         "heading".into(),
