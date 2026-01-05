@@ -168,3 +168,6 @@ pub fn call_nullary<T, F: Fn() -> T>(f: &F) -> T {
 pub fn call_unary<T, U, F: Fn(T) -> U>(f: &F, arg: T) -> U {
     f(arg)
 }
+pub fn call_binary<T, U, V, F: Fn(T, U) -> V>(f: &F, arg1: T, arg2: U) -> V {
+    f(arg1, arg2)
+}

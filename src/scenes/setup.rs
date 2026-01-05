@@ -1,13 +1,18 @@
-use std::u16;
+use std::{rc::Rc, sync::RwLock, u16};
 
 use terminal::{
     Scene, SceneType, TerminalResult,
     code::TerminalCode,
     elements::{Button, Dispatch, LineHorizontal, Rectangle, TextLine},
+    event::KeyEvent,
+    ext::{call_binary, call_unary},
+    traits::{Block, Input},
 };
 
 use crate::{
+    Client,
     elements::{HangulResult, Log, RrInput},
+    host::Host,
     scenes::error_popup_scene,
 };
 
@@ -83,71 +88,92 @@ const HOST_TEXT: &str = "Host";
 const HOST_WIDTH: u16 = HOST_TEXT.len() as u16;
 
 #[allow(dead_code)]
-pub struct SetupItems {
-    pub remote: Dispatch<TextLine>,
-    pub username: Dispatch<TextLine>,
-    pub password: Dispatch<TextLine>,
-    pub pg_user: Dispatch<TextLine>,
-    pub pg_password: Dispatch<TextLine>,
-    pub pg_address: Dispatch<TextLine>,
-    pub serve_on: Dispatch<TextLine>,
-}
+pub struct SetupItems {}
 
-pub fn setup_scene() -> TerminalResult<(Scene, Vec<(String, Scene)>, SetupItems)>
-{
+pub fn setup_scene(
+    client: Rc<RwLock<Client>>,
+    host: Rc<RwLock<Host>>,
+    host_running: Rc<RwLock<bool>>,
+) -> TerminalResult<(Scene, Vec<(String, Scene)>, SetupItems)> {
     let mut scene = Scene::new(SceneType::Full);
 
-    let items = SetupItems {
-        remote: Dispatch::from(TextLine {
+    let remote = SetupInput::new(
+        client.clone(),
+        TextLine {
             pos: REMOTE_POS,
             display_width: REMOTE_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        username: Dispatch::from(TextLine {
+        },
+        |c, s| c.remote = s.clone(),
+    );
+    let username = SetupInput::new(
+        client.clone(),
+        TextLine {
             pos: USERNAME_POS,
             display_width: USERNAME_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        password: Dispatch::from(TextLine {
+        },
+        |c, s| c.username = s.clone(),
+    );
+    let password = SetupInput::new(
+        client.clone(),
+        TextLine {
             pos: PASSWORD_POS,
             display_width: PASSWORD_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        pg_user: Dispatch::from(TextLine {
+        },
+        |c, s| c.password = s.clone(),
+    );
+    let pg_user = SetupInput::new(
+        host.clone(),
+        TextLine {
             pos: PG_USER_POS,
             display_width: PG_USER_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        pg_password: Dispatch::from(TextLine {
+        },
+        |h, s| h.pg_user = s.clone(),
+    );
+    let pg_password = SetupInput::new(
+        host.clone(),
+        TextLine {
             pos: PG_PASSWORD_POS,
             display_width: PG_PASSWORD_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        pg_address: Dispatch::from(TextLine {
+        },
+        |h, s| h.pg_password = s.clone(),
+    );
+    let pg_address = SetupInput::new(
+        host.clone(),
+        TextLine {
             pos: PG_ADDRESS_POS,
             display_width: PG_ADDRESS_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-        serve_on: Dispatch::from(TextLine {
+        },
+        |h, s| h.database_ip = s.clone(),
+    );
+    let serve_on = SetupInput::new(
+        host.clone(),
+        TextLine {
             pos: SERVE_ON_POS,
             display_width: SERVE_ON_WIDTH,
             index: 0,
             value: String::new(),
-        }),
-    };
-    scene.insert_input(items.remote.clone());
-    scene.insert_input(items.username.clone());
-    scene.insert_input(items.password.clone());
-    scene.insert_input(items.pg_user.clone());
-    scene.insert_input(items.pg_password.clone());
-    scene.insert_input(items.pg_address.clone());
-    scene.insert_input(items.serve_on.clone());
+        },
+        |h, s| h.listening_ip = s.clone(),
+    );
+    scene.insert_input(remote);
+    scene.insert_input(username);
+    scene.insert_input(password);
+    scene.insert_input(pg_user);
+    scene.insert_input(pg_password);
+    scene.insert_input(pg_address);
+    scene.insert_input(serve_on);
 
     scene.insert_block(
         "background".into(),
@@ -205,7 +231,7 @@ pub fn setup_scene() -> TerminalResult<(Scene, Vec<(String, Scene)>, SetupItems)
         LOGIN_TEXT.into(),
         LOGIN_WIDTH + 4,
         2,
-        Some(|| TerminalCode::None),
+        Some(|| TerminalCode::ReplaceCurrentScene("main".into())),
     ));
 
     scene.insert_block(
@@ -278,9 +304,51 @@ pub fn setup_scene() -> TerminalResult<(Scene, Vec<(String, Scene)>, SetupItems)
         HOST_TEXT.into(),
         HOST_WIDTH + 4,
         2,
-        Some(|| TerminalCode::None),
+        Some(move || {
+            let host_running = host_running.clone();
+            let mut guard =
+                host_running.write().unwrap_or_else(|e| e.into_inner());
+            *guard = true;
+            TerminalCode::ReplaceCurrentScene("server".into())
+        }),
     ));
-    Ok((scene, vec![], items))
+    Ok((scene, vec![], SetupItems {}))
+}
+
+pub struct SetupInput<T, F> {
+    obj: Rc<RwLock<T>>,
+    text_line: TextLine,
+    f: F,
+}
+impl<T, F: Fn(&mut T, &String)> SetupInput<T, F> {
+    pub fn new(obj: Rc<RwLock<T>>, text_line: TextLine, f: F) -> Self {
+        Self { obj, text_line, f }
+    }
+}
+impl<T, F> Block for SetupInput<T, F> {
+    fn pos(&self) -> (u16, u16, u16) {
+        self.text_line.pos
+    }
+
+    fn rel_line(&self, i: u16) -> Option<String> {
+        self.text_line.rel_line(i)
+    }
+}
+impl<T, F: Fn(&mut T, &String)> Input for SetupInput<T, F> {
+    fn feed(&mut self, key: KeyEvent) -> TerminalCode {
+        let tc = self.text_line.feed(key);
+        let mut guard = self.obj.write().unwrap_or_else(|e| e.into_inner());
+        call_binary(&self.f, &mut *guard, &self.text_line.value);
+        tc
+    }
+
+    fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
+        self.text_line.rel_cursor_pos()
+    }
+
+    fn input_pos(&self) -> (u16, u16) {
+        self.text_line.input_pos()
+    }
 }
 
 const fn centered_x(width: u16) -> u16 {

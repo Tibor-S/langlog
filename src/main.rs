@@ -3,13 +3,18 @@
 use std::{
     env,
     fmt::{self},
+    rc::Rc,
+    sync::RwLock,
 };
 
 use terminal::{Terminal, TerminalError, code::TerminalCode};
 
 use crate::{
     host::{Host, HostError},
-    scenes::{MainItems, help_menu_scene, main_scene, menu_scene, setup_scene},
+    scenes::{
+        MainItems, help_menu_scene, main_scene, menu_scene, server_scene,
+        setup_scene,
+    },
 };
 
 mod elements;
@@ -42,11 +47,20 @@ macro_rules! ctrl {
     };
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct Client {
+    remote: String,
+    username: String,
+    password: String,
+}
+
 #[tokio::main]
 async fn main() -> LanglogResult<()> {
-    // pretty_env_logger::init();
-    // let arguments = Arguments::new()?;
-    // let host = arguments.host.unwrap();
+    pretty_env_logger::init();
+    let arguments = Arguments::new()?;
+    let host_running = Rc::new(RwLock::new(arguments.host.is_some()));
+    let host = Rc::new(RwLock::new(arguments.host.unwrap_or_default()));
+    let client = Rc::new(RwLock::new(Client::default()));
 
     // host::serve(&host).await?;
     // return Ok(());
@@ -75,10 +89,13 @@ async fn main() -> LanglogResult<()> {
     // 4:3 becomes 8:3
     let (main_scene, scenes, MainItems { log, .. }) = main_scene((81, 31))?;
     let main_log = log.clone();
-    let (main_scene, scenes, _) = setup_scene()?;
+    let (setup_scene, _, _) =
+        setup_scene(client.clone(), host.clone(), host_running.clone())?;
+    let (server_scene, _, _) =
+        server_scene(host.clone(), host_running.clone())?;
     let mut term = Terminal::new(
-        "main".into(),
-        main_scene,
+        "setup".into(),
+        setup_scene,
         |k| match k {
             esc!() => TerminalCode::PreviousScene,
             ctrl!('h') => TerminalCode::GoToScene("help".into()),
@@ -90,6 +107,9 @@ async fn main() -> LanglogResult<()> {
             Ok(())
         },
     );
+
+    term.insert_scene("main".into(), main_scene);
+    term.insert_scene("server".into(), server_scene);
 
     for (name, scene) in scenes {
         term.insert_scene(name, scene);

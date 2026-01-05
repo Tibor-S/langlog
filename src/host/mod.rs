@@ -11,7 +11,7 @@ use crate::host::database::{Account, Database, DatabaseError, HangulLogRow};
 
 pub mod database;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Host {
     pub pg_user: String,
     pub pg_password: String,
