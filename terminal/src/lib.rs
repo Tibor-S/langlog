@@ -110,6 +110,7 @@ where
             )?;
         }
         self.scene_mut().load_all();
+        terminal::enable_raw_mode()?;
         loop {
             if !matches!(self.scene().ty, SceneType::FullNoClear) {
                 queue!(
@@ -165,6 +166,7 @@ where
             }
         }
 
+        terminal::disable_raw_mode()?;
         crossterm::execute!(
             w,
             style::ResetColor,
