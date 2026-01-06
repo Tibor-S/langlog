@@ -1,5 +1,3 @@
-// #![allow(dead_code)]
-
 use std::{
     env,
     fmt::{self},
@@ -10,7 +8,7 @@ use std::{
 use terminal::{Terminal, TerminalError, code::TerminalCode};
 
 use crate::{
-    host::{Host, HostError, database::Account},
+    host::{Host, HostError},
     scenes::{
         MainItems, help_menu_scene, main_scene, menu_scene, server_scene,
         setup_scene,
@@ -81,7 +79,6 @@ async fn main() -> LanglogResult<()> {
     // 4:3 becomes 8:3
     let (main_scene, scenes, MainItems { log, .. }) =
         main_scene((81, 31), client.clone(), account.clone())?;
-    let main_log = log.clone();
     let (setup_scene, _, _) =
         setup_scene(client.clone(), host.clone(), host_running.clone())?;
     let (server_scene, _, _) =
@@ -95,10 +92,7 @@ async fn main() -> LanglogResult<()> {
             ctrl!(' ') => TerminalCode::GoToScene("menu".into()),
             _ => TerminalCode::UnhandledKey(k),
         },
-        move || {
-            main_log.read().unwrap().save()?;
-            Ok(())
-        },
+        move || Ok(()),
     );
 
     term.insert_scene("main".into(), main_scene);
@@ -121,6 +115,7 @@ async fn main() -> LanglogResult<()> {
 
 #[derive(Debug, Clone, Default)]
 struct Arguments {
+    #[allow(dead_code)]
     pub path: String,
     pub host: Option<Host>,
 }

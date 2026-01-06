@@ -3,21 +3,15 @@ use std::{rc::Rc, sync::RwLock, u16};
 use terminal::{
     Scene, SceneType, TerminalResult,
     code::TerminalCode,
-    elements::{Button, Dispatch, LineHorizontal, Rectangle, TextLine},
+    elements::{Button, LineHorizontal, Rectangle, TextLine},
     event::KeyEvent,
-    ext::{call_binary, call_unary},
+    ext::call_binary,
     traits::{Block, Input},
 };
 
-use crate::{
-    Client,
-    elements::{HangulResult, Log, RrInput},
-    host::Host,
-    scenes::error_popup_scene,
-};
+use crate::{Client, host::Host};
 
 const WIDTH: u16 = 81;
-const HEIGHT: u16 = 31;
 const REC_Y: u16 = 2;
 const REC_WIDTH: u16 = 61;
 const REC_HEIGHT: u16 = 28;

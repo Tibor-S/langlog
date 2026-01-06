@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{collections::BTreeMap, ops::Deref};
 
 #[derive(Debug)]
@@ -8,6 +6,7 @@ pub struct Tree<K, V> {
     val: Option<V>,
     connections: BTreeMap<K, Box<Tree<K, V>>>,
 }
+#[allow(dead_code)]
 impl<K, V> Tree<K, V>
 where
     K: Clone + Eq + Ord,
@@ -95,6 +94,7 @@ where
         ret
     }
 }
+#[allow(dead_code)]
 impl<V: Clone> Tree<char, V> {
     pub fn with_prefix(&self, token: &str) -> Vec<(String, V)> {
         let temp = token.chars().collect::<Vec<_>>();
@@ -135,6 +135,7 @@ impl<K, V> Default for Tree<K, V> {
 // Allows k-indexing (and usize-indexing via deref)
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OrderedMap<K, V>(Vec<(K, V)>);
+#[allow(dead_code)]
 impl<K: Ord, V> OrderedMap<K, V> {
     pub fn new() -> Self {
         Self::default()

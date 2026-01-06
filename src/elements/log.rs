@@ -1,13 +1,8 @@
-use std::{
-    cmp::Ordering, env, io, ops::Range, path::PathBuf, rc::Rc, sync::RwLock,
-};
+use std::{cmp::Ordering, io, ops::Range, rc::Rc, sync::RwLock};
 
-use csv::{ReaderBuilder, WriterBuilder};
 use isahc::ReadResponseExt;
 use isahc::Request;
 use isahc::RequestExt;
-use isahc::http::StatusCode;
-use serde::{Deserialize, Serialize};
 use terminal::{
     code::TerminalCode,
     elements::TextLine,
@@ -18,18 +13,11 @@ use terminal::{
 };
 
 use crate::HttpResult;
-use crate::host::DeleteEntry;
-use crate::host::InsertEntry;
 use crate::host::SignIn;
 use crate::host::database::Account;
 use crate::host::database::HangulLogRow;
 use crate::{Client, ext::OrderedMap, hangul::Hangul};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Row {
-    hangul: Hangul,
-    description: String,
-}
 #[derive(Debug, Clone)]
 pub struct Log {
     pos: (u16, u16, u16),
@@ -52,40 +40,17 @@ impl Log {
         client: Rc<RwLock<Client>>,
         account: Rc<RwLock<Option<Account>>>,
     ) -> io::Result<Self> {
-        let entries: OrderedMap<Hangul, TextLine> =
-            match Self::get_csv_records() {
-                Ok(r) => r
-                    .into_iter()
-                    .map(|row| {
-                        (
-                            row.hangul,
-                            Self::new_description(width, row.description),
-                        )
-                    })
-                    .collect(),
-                Err(e) => {
-                    log::warn!("{}", e);
-                    Default::default()
-                }
-            };
         Ok(Self {
             pos,
             input_pos: (pos.0, pos.1),
             width,
             height: height.saturating_sub(2),
             index: 0,
-            entries,
+            entries: Default::default(),
             focused: false,
             client,
             account,
         })
-    }
-
-    pub fn save(&self) -> io::Result<()> {
-        Self::set_csv_records(self.entries.iter().map(|(h, d)| Row {
-            hangul: h.clone(),
-            description: d.value().to_string(),
-        }))
     }
 
     pub fn with_input_pos(&mut self, pos: (u16, u16)) -> &mut Self {
@@ -113,16 +78,6 @@ impl Log {
                 ret
             }
             (ret, _) => ret,
-        }
-    }
-
-    pub fn remove_entry(&mut self, key: &Hangul) {
-        let current = self.current_entry().map(|c| c.0.clone());
-        match (current, self.entries.remove(key)) {
-            (Some(current), Some(_)) if current < *key => {
-                self.index -= 1;
-            }
-            _ => (),
         }
     }
 
@@ -159,37 +114,6 @@ impl Log {
             range_with_mid(index as isize, len as isize),
             0..self.line_count() as usize,
         )
-    }
-
-    fn get_csv_records() -> io::Result<Vec<Row>> {
-        let csv_path = Self::csv_path()?;
-        let mut rdr =
-            ReaderBuilder::new().delimiter(b';').from_path(csv_path)?;
-
-        Ok(rdr
-            .deserialize()
-            .filter_map(|res| res.ok())
-            .collect::<Vec<_>>())
-    }
-
-    fn set_csv_records(
-        entries: impl IntoIterator<Item = Row>,
-    ) -> io::Result<()> {
-        let csv_path = Self::csv_path()?;
-        let mut wtr = WriterBuilder::new()
-            .delimiter(b';')
-            .has_headers(true)
-            .from_path(csv_path)?;
-        for entry in entries {
-            wtr.serialize(entry)?;
-        }
-        Ok(())
-    }
-
-    fn csv_path() -> io::Result<PathBuf> {
-        let mut csv_file = env::current_dir()?.into_os_string();
-        csv_file.push("/hangul-log.csv");
-        Ok(csv_file.into())
     }
 
     fn new_description(width: u16, text: String) -> TextLine {
