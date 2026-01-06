@@ -203,7 +203,6 @@ impl Block for Log {
     }
 
     fn load(&mut self) {
-        log::debug!("load");
         self.entries.clear();
         let guard = self.client.read().unwrap_or_else(|e| e.into_inner());
         let client = &*guard;
@@ -247,7 +246,6 @@ impl Block for Log {
         };
         drop(guard);
         for e in entries {
-            log::debug!("entry: {}", e.hangul);
             let hangul = match Hangul::try_from(e.hangul.as_str()) {
                 Ok(h) => h,
                 Err(e) => {

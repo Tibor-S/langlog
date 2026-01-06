@@ -50,7 +50,6 @@ impl Block for HostServe {
     }
 
     fn load(&mut self) {
-        log::debug!("load");
         match self.host_running.read() {
             Ok(guard) if !*guard => return,
             Err(_) => return,

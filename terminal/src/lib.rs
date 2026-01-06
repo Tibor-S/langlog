@@ -158,7 +158,6 @@ where
                     crossterm::execute!(w, terminal::EnterAlternateScreen)?
                 }
                 TerminalCode::Reload => {
-                    log::debug!("Reloading");
                     self.scene_mut().load_all();
                 }
                 TerminalCode::Exit => break,

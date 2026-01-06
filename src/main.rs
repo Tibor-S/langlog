@@ -26,6 +26,17 @@ mod syllable;
 
 use terminal::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
+macro_rules! return_err {
+    ($res:expr) => {
+        match $res {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("{}", e);
+                return Err(e.into());
+            }
+        }
+    };
+}
 macro_rules! esc {
     () => {
         KeyEvent {
@@ -52,10 +63,9 @@ pub struct Client {
     password: String,
 }
 
-#[tokio::main]
-async fn main() -> LanglogResult<()> {
+fn main() -> LanglogResult<()> {
     pretty_env_logger::init();
-    let arguments = Arguments::new()?;
+    let arguments = return_err!(Arguments::new());
     let arg_host = arguments.host.is_some();
     let host_running = Rc::new(RwLock::new(arg_host));
     let host = Rc::new(RwLock::new(arguments.host.unwrap_or_default()));
@@ -63,7 +73,7 @@ async fn main() -> LanglogResult<()> {
     let account = Rc::new(RwLock::new(None));
     if arg_host {
         let (server_scene, _, _) =
-            server_scene(host.clone(), host_running.clone())?;
+            return_err!(server_scene(host.clone(), host_running.clone()));
         let mut term = Terminal::new(
             "sever".into(),
             server_scene,
@@ -72,17 +82,21 @@ async fn main() -> LanglogResult<()> {
             },
             move || Ok(()),
         );
-        return term.run(None).map_err(LanglogError::from);
+        return_err!(term.run(None));
+        return Ok(());
     }
 
     // Assuming char is 1:2
     // 4:3 becomes 8:3
     let (main_scene, scenes, MainItems { log, .. }) =
-        main_scene((81, 31), client.clone(), account.clone())?;
-    let (setup_scene, _, _) =
-        setup_scene(client.clone(), host.clone(), host_running.clone())?;
+        return_err!(main_scene((81, 31), client.clone(), account.clone()));
+    let (setup_scene, _, _) = return_err!(setup_scene(
+        client.clone(),
+        host.clone(),
+        host_running.clone()
+    ));
     let (server_scene, _, _) =
-        server_scene(host.clone(), host_running.clone())?;
+        return_err!(server_scene(host.clone(), host_running.clone()));
     let mut term = Terminal::new(
         "setup".into(),
         setup_scene,
@@ -101,16 +115,17 @@ async fn main() -> LanglogResult<()> {
     for (name, scene) in scenes {
         term.insert_scene(name, scene);
     }
-    term.insert_scene("help".into(), help_menu_scene()?);
+    term.insert_scene("help".into(), return_err!(help_menu_scene()));
 
     let (menu_scene, scenes) =
-        menu_scene((81, 31), log, client.clone(), account.clone())?;
+        return_err!(menu_scene((81, 31), log, client.clone(), account.clone()));
     term.insert_scene("menu".into(), menu_scene);
     for (name, scene) in scenes {
         term.insert_scene(name, scene);
     }
 
-    term.run(Some((81, 31))).map_err(LanglogError::from)
+    return_err!(term.run(Some((81, 31))));
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]

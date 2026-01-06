@@ -303,7 +303,6 @@ impl TryFrom<char> for Syllable {
         if code < 0xac00 || code > 0xd7a3 {
             return Err(SyllableError::InvalidChar(value));
         }
-        log::debug!("code: {}", code);
 
         let code = code - 0xac00; // 0x0dad
         let ini = code / 588; // 0x0005
@@ -317,7 +316,6 @@ impl TryFrom<char> for Syllable {
             finale: fin
                 .map(|f| unsafe { transmute(FinalJamo::G as u16 + f - 1) }),
         };
-        log::debug!("syllable: {}", syl);
         Ok(syl)
     }
 }
