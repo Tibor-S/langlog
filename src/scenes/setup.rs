@@ -96,8 +96,8 @@ pub fn setup_scene(
         TextLine {
             pos: REMOTE_POS,
             display_width: REMOTE_WIDTH,
-            index: 0,
-            value: String::new(),
+            index: "https://hangul-api.tibors.se".len() as u16,
+            value: "https://hangul-api.tibors.se".into(),
         },
         |c, s| c.remote = s.clone(),
     );
