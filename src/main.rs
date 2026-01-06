@@ -63,7 +63,8 @@ pub struct Client {
     password: String,
 }
 
-fn main() -> LanglogResult<()> {
+#[tokio::main]
+async fn main() -> LanglogResult<()> {
     pretty_env_logger::init();
     let arguments = return_err!(Arguments::new());
     let arg_host = arguments.host.is_some();
