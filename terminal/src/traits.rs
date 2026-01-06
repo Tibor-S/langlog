@@ -12,6 +12,10 @@ pub trait Block {
         let _ = i;
         vec![]
     }
+    /// Called when scene containing block is entered
+    fn load(&mut self) {}
+    /// Called when leaving scene containing block
+    fn unload(&mut self) {}
 }
 impl Block for () {
     fn pos(&self) -> (u16, u16, u16) {

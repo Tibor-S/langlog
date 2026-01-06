@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, post},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::host::database::{Account, Database, DatabaseError, HangulLogRow};
 
@@ -155,23 +155,23 @@ async fn log_delete_entry(
     }
 }
 
-#[derive(Deserialize)]
-struct SignIn {
-    username: String,
-    password: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignIn {
+    pub username: String,
+    pub password: String,
 }
 
-#[derive(Deserialize)]
-struct InsertEntry {
-    account: Account,
-    hangul: String,
-    description: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InsertEntry {
+    pub account: Account,
+    pub hangul: String,
+    pub description: String,
 }
 
-#[derive(Deserialize)]
-struct DeleteEntry {
-    account: Account,
-    hangul: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteEntry {
+    pub account: Account,
+    pub hangul: String,
 }
 
 #[derive(Debug, thiserror::Error)]

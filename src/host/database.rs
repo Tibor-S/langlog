@@ -123,8 +123,8 @@ macro_rules! delete_hangul_log_row {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
-    account_id: i64,
-    username: String,
+    pub account_id: i64,
+    pub username: String,
 }
 
 #[derive(Debug, Clone)]
@@ -248,11 +248,11 @@ impl Database {
     }
 }
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct HangulLogRow {
     hangul_log_id: i64,
-    hangul: String,
-    description: String,
+    pub hangul: String,
+    pub description: String,
 }
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct AccountRow {

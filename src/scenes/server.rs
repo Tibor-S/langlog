@@ -29,35 +29,35 @@ pub fn server_scene(
     host: Rc<RwLock<Host>>,
     host_running: Rc<RwLock<bool>>,
 ) -> TerminalResult<(Scene, Vec<(String, Scene)>, ServerItems)> {
-    let mut scene = Scene::new(SceneType::Full);
+    let mut scene = Scene::new(SceneType::FullNoClear);
     scene.insert_input(HostServe::new(host.clone(), host_running));
 
     let items = ServerItems {};
-    const X: u16 = 10;
-    scene.insert_block(
-        "database".into(),
-        HostText::new((X, 14, 0), host.clone(), |h| {
-            format!(
-                "Connected to database at: postgres://{}@{}",
-                h.pg_user, h.database_ip
-            )
-        }),
-    )?;
-    scene.insert_block(
-        "listen".into(),
-        HostText::new((X, 15, 0), host.clone(), |h| {
-            format!("Listening on: {}", h.listening_ip)
-        }),
-    )?;
-    scene.insert_block(
-        "listenening-on".into(),
-        TextLine {
-            pos: (X, 16, 0),
-            display_width: "Exit with ^q".len() as u16,
-            index: 0,
-            value: "Exit with ^q".into(),
-        },
-    )?;
+    // const X: u16 = 10;
+    // scene.insert_block(
+    //     "database".into(),
+    //     HostText::new((X, 14, 0), host.clone(), |h| {
+    //         format!(
+    //             "Connected to database at: postgres://{}@{}",
+    //             h.pg_user, h.database_ip
+    //         )
+    //     }),
+    // )?;
+    // scene.insert_block(
+    //     "listen".into(),
+    //     HostText::new((X, 15, 0), host.clone(), |h| {
+    //         format!("Listening on: {}", h.listening_ip)
+    //     }),
+    // )?;
+    // scene.insert_block(
+    //     "listenening-on".into(),
+    //     TextLine {
+    //         pos: (X, 16, 0),
+    //         display_width: "Exit with ^q".len() as u16,
+    //         index: 0,
+    //         value: "Exit with ^q".into(),
+    //     },
+    // )?;
 
     Ok((scene, vec![], items))
 }
@@ -115,6 +115,28 @@ impl Block for HostServe {
         let _ = i;
         None
     }
+
+    fn load(&mut self) {
+        log::debug!("load");
+        match self.host_running.read() {
+            Ok(guard) if !*guard => return,
+            Err(_) => return,
+            _ => (),
+        };
+        let host = self.host.read().unwrap_or_else(|e| e.into_inner()).clone();
+        self.thread = Some(tokio::spawn(async move {
+            log::debug!("Started server");
+            match serve(&host).await {
+                Ok(_) => (),
+                Err(e) => log::error!("{}", e),
+            }
+        }));
+    }
+
+    fn unload(&mut self) {
+        self.thread.as_mut().map(|t| t.abort());
+        self.thread = None
+    }
 }
 impl Input for HostServe {
     fn feed(&mut self, key: KeyEvent) -> TerminalCode {
@@ -127,26 +149,6 @@ impl Input for HostServe {
 
     fn input_pos(&self) -> (u16, u16) {
         Default::default()
-    }
-
-    fn focus(&mut self) {
-        match self.host_running.read() {
-            Ok(guard) if !*guard => return,
-            Err(_) => return,
-            _ => (),
-        };
-        let host = self.host.read().unwrap_or_else(|e| e.into_inner()).clone();
-        self.thread = Some(tokio::spawn(async move {
-            match serve(&host).await {
-                Ok(_) => (),
-                Err(e) => log::error!("{}", e),
-            }
-        }));
-    }
-
-    fn unfocus(&mut self) {
-        self.thread.as_mut().map(|t| t.abort());
-        self.thread = None
     }
 }
 

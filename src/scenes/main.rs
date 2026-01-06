@@ -1,3 +1,6 @@
+use std::{rc::Rc, sync::RwLock};
+
+use isahc::{Request, RequestExt, http::StatusCode};
 use terminal::{
     Scene, TerminalResult,
     code::TerminalCode,
@@ -5,9 +8,12 @@ use terminal::{
 };
 
 use crate::{
+    Client, HttpResult,
     elements::{
         DescriptionInput, HangulResult, JamoInfo, Log, PossibleInfo, RrInput,
     },
+    hangul::Hangul,
+    host::{InsertEntry, database::Account},
     scenes::error_popup_scene,
 };
 
@@ -57,6 +63,8 @@ pub struct MainItems {
 
 pub fn main_scene(
     full_wh: (u16, u16),
+    client: Rc<RwLock<Client>>,
+    account: Rc<RwLock<Option<Account>>>,
 ) -> TerminalResult<(Scene, Vec<(String, Scene)>, MainItems)> {
     let mut scene = Scene::default();
     /*
@@ -235,7 +243,7 @@ pub fn main_scene(
      */
     let entry_log = {
         let l = Dispatch::from(
-            Log::new((42, 1, 0), 38, 29)?
+            Log::new((42, 1, 0), 38, 29, client.clone(), account.clone())?
                 .with_input_pos((80, 30))
                 .clone(),
         );
@@ -246,34 +254,56 @@ pub fn main_scene(
      * SAVE
      */
     {
+        let client = client.clone();
+        let account = account.clone();
         let rr = rr.clone();
         let di = description_input.clone();
-        let lg = entry_log.clone();
         let b = Button::new(
             (1, 9, 0),
             "SAVE".into(),
             38,
             17,
             Some(move || {
-                if rr.read().unwrap().hangul().read().unwrap().is_empty() {
+                let mut rr = rr.write().unwrap_or_else(|e| e.into_inner());
+                let mut di = di.write().unwrap_or_else(|e| e.into_inner());
+                let hangul = rr.hangul();
+                let hangul_guard =
+                    hangul.read().unwrap_or_else(|e| e.into_inner());
+                let hangul = hangul_guard.str();
+                let description = di.value();
+
+                if hangul.is_empty() {
                     return TerminalCode::GoToScene(
                         "empty-hangul-error".into(),
                     );
                 }
 
-                if di.read().unwrap().value().is_empty() {
+                if description.is_empty() {
                     return TerminalCode::GoToScene(
                         "empty-description-error".into(),
                     );
                 }
 
-                lg.write().unwrap().insert_entry(
-                    rr.read().unwrap().hangul().read().unwrap().str().clone(),
-                    di.read().unwrap().value().to_string(),
-                );
-                rr.write().unwrap().clear();
-                di.write().unwrap().clear();
-                TerminalCode::Focus(0)
+                let client = client.read().unwrap_or_else(|e| e.into_inner());
+                let client = &*client;
+                let account = account.read().unwrap_or_else(|e| e.into_inner());
+                let account = if let Some(account) = account.as_ref() {
+                    account
+                } else {
+                    return TerminalCode::GoToScene("no-account-error".into());
+                };
+
+                let res =
+                    insert_entry(&*client, &*account, hangul, description);
+                if !matches!(res, Ok(true)) {
+                    return TerminalCode::GoToScene(
+                        "entry-exists-error".into(),
+                    );
+                }
+                drop(hangul_guard);
+                rr.clear();
+                di.clear();
+                TerminalCode::Reload
             }),
         );
         scene.insert_input(b);
@@ -302,12 +332,18 @@ pub fn main_scene(
         &[],
         true,
     )?;
+    let no_account_error =
+        error_popup_scene(full_wh, "Not signed in".into(), &[], true)?;
+    let entry_exists_error =
+        error_popup_scene(full_wh, "Entry already exists".into(), &[], true)?;
 
     Ok((
         scene,
         vec![
             ("empty-hangul-error".into(), empty_hangul_error),
             ("empty-description-error".into(), empty_description_error),
+            ("no-account-error".into(), no_account_error),
+            ("entry-exists-error".into(), entry_exists_error),
         ],
         MainItems {
             hangul_result,
@@ -316,4 +352,24 @@ pub fn main_scene(
             log: entry_log,
         },
     ))
+}
+
+// true if insertion was succesful
+// and reload is required
+fn insert_entry(
+    client: &Client,
+    account: &Account,
+    hangul: &Hangul,
+    description: &str,
+) -> HttpResult<bool> {
+    Ok(Request::post(format!("{}/log/insert", client.remote))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&InsertEntry {
+            account: account.clone(),
+            hangul: hangul.to_string(),
+            description: description.to_string(),
+        })?)?
+        .send()?
+        .status()
+        == StatusCode::RESET_CONTENT)
 }

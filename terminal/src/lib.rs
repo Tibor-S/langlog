@@ -97,21 +97,28 @@ where
             .expect("Logic error! Scene did not exist")
     }
 
-    pub fn run(&mut self, size: (u16, u16)) -> TerminalResult<()> {
+    pub fn run(
+        &mut self,
+        alternate_screen: Option<(u16, u16)>,
+    ) -> TerminalResult<()> {
         let w = &mut Self::stdout();
-        crossterm::execute!(
-            w,
-            terminal::EnterAlternateScreen,
-            terminal::SetSize(size.0, size.1)
-        )?;
-
-        loop {
-            queue!(
+        if let Some((wth, hgt)) = alternate_screen {
+            crossterm::execute!(
                 w,
-                style::ResetColor,
-                terminal::Clear(terminal::ClearType::All),
-                cursor::MoveTo(0, 0)
+                terminal::EnterAlternateScreen,
+                terminal::SetSize(wth, hgt)
             )?;
+        }
+        self.scene_mut().load_all();
+        loop {
+            if !matches!(self.scene().ty, SceneType::FullNoClear) {
+                queue!(
+                    w,
+                    style::ResetColor,
+                    terminal::Clear(terminal::ClearType::All),
+                    cursor::MoveTo(0, 0)
+                )?;
+            }
             for previous_scene in self.previous_scenes
                 [self.draw_previous_range()]
             .iter()
@@ -131,16 +138,28 @@ where
                     self.scene_mut().focus_input(i)?;
                 }
                 TerminalCode::GoToScene(name) => {
-                    self.go_to_scene(name);
+                    self.go_to_scene(name)?;
                 }
                 TerminalCode::ReplaceCurrentScene(name) => {
-                    self.current_scene = name
+                    self.replace_scene(name)?;
                 }
                 TerminalCode::Focus(i) => {
                     self.scene_mut().focus_input(i)?;
                 }
                 TerminalCode::FocusAt(pos) => {
                     self.scene_mut().focus_input_at(pos)?;
+                }
+                TerminalCode::ReplaceCurrentSceneLeaveAlternate(name) => {
+                    self.replace_scene(name)?;
+                    crossterm::execute!(w, terminal::LeaveAlternateScreen)?
+                }
+                TerminalCode::ReplaceCurrentSceneEnterAlternate(name) => {
+                    self.replace_scene(name)?;
+                    crossterm::execute!(w, terminal::EnterAlternateScreen)?
+                }
+                TerminalCode::Reload => {
+                    log::debug!("Reloading");
+                    self.scene_mut().load_all();
                 }
                 TerminalCode::Exit => break,
                 TerminalCode::None | TerminalCode::UnhandledKey(_) => (),
@@ -161,21 +180,40 @@ where
         self.scenes.insert(name, scene);
     }
 
-    pub fn go_to_scene(&mut self, scene: String) {
+    pub fn go_to_scene(&mut self, scene: String) -> TerminalResult<()> {
         if self.current_scene == scene {
-            return;
+            return Ok(());
+        }
+        if !self.scenes.contains_key(&scene) {
+            return Err(TerminalError::InvalidScene(scene));
         }
         if matches!(self.scene().ty, SceneType::Full) {
             self.last_full_scene.push(self.previous_scenes.len());
         }
+        self.scene_mut().unload_all();
         self.previous_scenes.push(self.current_scene.clone());
         self.current_scene = scene;
+        self.scene_mut().load_all();
+        Ok(())
+    }
+
+    pub fn replace_scene(&mut self, scene: String) -> TerminalResult<()> {
+        if !self.scenes.contains_key(&scene) {
+            return Err(TerminalError::InvalidScene(scene));
+        }
+        self.scene_mut().unload_all();
+        self.current_scene = scene;
+        self.scene_mut().load_all();
+        Ok(())
     }
 
     pub fn previous_scene(&mut self) {
         if let Some(scene) = self.previous_scenes.pop() {
+            self.scene_mut().unload_all();
             self.current_scene = scene;
+            self.scene_mut().load_all();
         }
+
         if Some(self.previous_scenes.len()) == self.get_last_full_scene() {
             self.last_full_scene.pop();
         }
@@ -322,6 +360,7 @@ impl<F> fmt::Debug for Terminal<F> {
 pub enum SceneType {
     #[default]
     Full,
+    FullNoClear,
     PopUp(u16, u16), // Position for pop-up, i.e, all blocks will be drawn relative to given position
 }
 #[derive(Default)]
@@ -358,7 +397,7 @@ impl Scene {
 
     pub fn pos(&self) -> (u16, u16) {
         match self.ty {
-            SceneType::Full => (0, 0),
+            SceneType::Full | SceneType::FullNoClear => (0, 0),
             SceneType::PopUp(x, y) => (x, y),
         }
     }
@@ -406,6 +445,24 @@ impl Scene {
             None => return None,
         };
         self.blocks.get(index)
+    }
+
+    pub fn load_all(&mut self) {
+        for i in self.inputs.as_mut_slice() {
+            i.load();
+        }
+        for b in self.blocks.as_mut_slice() {
+            b.load();
+        }
+    }
+
+    pub fn unload_all(&mut self) {
+        for i in self.inputs.as_mut_slice() {
+            i.unload();
+        }
+        for b in self.blocks.as_mut_slice() {
+            b.unload();
+        }
     }
 
     /// Returns `(A, B)`
@@ -558,6 +615,8 @@ pub enum TerminalError {
     NoInputAt((u16, u16)),
     #[error("Name already exists: {0}")]
     NameExists(String),
+    #[error("No scene exists with name {0:?}")]
+    InvalidScene(String),
     #[error("{0}")]
     IO(#[from] io::Error),
 }

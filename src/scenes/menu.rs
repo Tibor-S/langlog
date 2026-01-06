@@ -1,5 +1,6 @@
-use std::u16;
+use std::{rc::Rc, sync::RwLock, u16};
 
+use isahc::{Request, RequestExt, http::StatusCode};
 use terminal::{
     Scene, SceneType, TerminalResult,
     code::TerminalCode,
@@ -7,7 +8,10 @@ use terminal::{
 };
 
 use crate::{
+    Client, HttpResult,
     elements::{HangulResult, Log, RrInput},
+    hangul::Hangul,
+    host::{DeleteEntry, database::Account},
     scenes::error_popup_scene,
 };
 
@@ -27,6 +31,8 @@ const CLOSE_LEN: u16 = 5;
 pub fn menu_scene(
     full_wh: (u16, u16),
     log: Dispatch<Log>,
+    client: Rc<RwLock<Client>>,
+    account: Rc<RwLock<Option<Account>>>,
 ) -> TerminalResult<(Scene, Vec<(String, Scene)>)> {
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
@@ -63,19 +69,22 @@ pub fn menu_scene(
         Some(|| TerminalCode::PreviousScene),
     ));
     let find_scene = find_scene(log.clone())?;
-    let delete_scene = delete_scene(log)?;
+    let delete_scene = delete_scene(client, account)?;
     let not_found_error = error_popup_scene(
         full_wh,
         "Could not find given entry!".into(),
         &[],
         true,
     )?;
+    let no_account_error =
+        error_popup_scene(full_wh, "Not signed in".into(), &[], true)?;
     Ok((
         scene,
         vec![
             ("find-menu".into(), find_scene),
             ("delete-menu".into(), delete_scene),
             ("not-found-error".into(), not_found_error),
+            ("no-account-error".into(), no_account_error),
         ],
     ))
 }
@@ -148,7 +157,10 @@ fn find_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
     Ok(scene)
 }
 
-fn delete_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
+fn delete_scene(
+    client: Rc<RwLock<Client>>,
+    account: Rc<RwLock<Option<Account>>>,
+) -> TerminalResult<Scene> {
     let mut scene = Scene::new(SceneType::PopUp(12, 5));
     scene.insert_block(
         "background".into(),
@@ -193,10 +205,35 @@ fn delete_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
         DELETE_LEN + MARGIN_2,
         MARGIN,
         Some(move || {
-            log.write().unwrap().remove_entry(
-                rr.write().unwrap().hangul().read().unwrap().str(),
-            );
-            rr.write().unwrap().clear();
+            let mut rr = rr.write().unwrap_or_else(|e| e.into_inner());
+            {
+                let hangul_res = rr.hangul();
+                let hangul_guard =
+                    hangul_res.read().unwrap_or_else(|e| e.into_inner());
+                let hangul = hangul_guard.str();
+
+                if hangul.is_empty() {
+                    return TerminalCode::None;
+                }
+
+                let client = client.read().unwrap_or_else(|e| e.into_inner());
+                let client = &*client;
+                let account = account.read().unwrap_or_else(|e| e.into_inner());
+
+                let account = if let Some(account) = account.as_ref() {
+                    account
+                } else {
+                    return TerminalCode::ReplaceCurrentScene(
+                        "no-account-error".into(),
+                    );
+                };
+
+                let res = delete_entry(client, account, hangul);
+                if !matches!(res, Ok(true)) {
+                    return TerminalCode::GoToScene("not-found-error".into());
+                }
+            }
+            rr.clear();
             TerminalCode::PreviousScene
         }),
     ));
@@ -213,4 +250,22 @@ fn delete_scene(log: Dispatch<Log>) -> TerminalResult<Scene> {
 
 fn centered_x(width: u16) -> u16 {
     (WIDTH / 2).saturating_sub(width / 2)
+}
+
+// true if deletion was succesful
+// and reload is required
+fn delete_entry(
+    client: &Client,
+    account: &Account,
+    hangul: &Hangul,
+) -> HttpResult<bool> {
+    Ok(Request::delete(format!("{}/log/delete", client.remote))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&DeleteEntry {
+            account: account.clone(),
+            hangul: hangul.to_string(),
+        })?)?
+        .send()?
+        .status()
+        == StatusCode::RESET_CONTENT)
 }

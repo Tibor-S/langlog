@@ -309,7 +309,7 @@ pub fn setup_scene(
             let mut guard =
                 host_running.write().unwrap_or_else(|e| e.into_inner());
             *guard = true;
-            TerminalCode::ReplaceCurrentScene("server".into())
+            TerminalCode::ReplaceCurrentSceneLeaveAlternate("server".into())
         }),
     ));
     Ok((scene, vec![], SetupItems {}))

@@ -1,6 +1,12 @@
-use std::{cmp::Ordering, env, io, ops::Range, path::PathBuf};
+use std::{
+    cmp::Ordering, env, io, ops::Range, path::PathBuf, rc::Rc, sync::RwLock,
+};
 
 use csv::{ReaderBuilder, WriterBuilder};
+use isahc::ReadResponseExt;
+use isahc::Request;
+use isahc::RequestExt;
+use isahc::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use terminal::{
     code::TerminalCode,
@@ -11,7 +17,13 @@ use terminal::{
     traits::{Block, Input},
 };
 
-use crate::{ext::OrderedMap, hangul::Hangul};
+use crate::HttpResult;
+use crate::host::DeleteEntry;
+use crate::host::InsertEntry;
+use crate::host::SignIn;
+use crate::host::database::Account;
+use crate::host::database::HangulLogRow;
+use crate::{Client, ext::OrderedMap, hangul::Hangul};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Row {
@@ -27,6 +39,8 @@ pub struct Log {
     entries: OrderedMap<Hangul, TextLine>,
     index: usize,
     focused: bool,
+    client: Rc<RwLock<Client>>,
+    account: Rc<RwLock<Option<Account>>>,
 }
 impl Log {
     pub const ENTRY_HEIGHT: usize = 3; // Hangul \ Description \ Br
@@ -35,6 +49,8 @@ impl Log {
         pos: (u16, u16, u16),
         width: u16,
         height: u16,
+        client: Rc<RwLock<Client>>,
+        account: Rc<RwLock<Option<Account>>>,
     ) -> io::Result<Self> {
         let entries: OrderedMap<Hangul, TextLine> =
             match Self::get_csv_records() {
@@ -60,6 +76,8 @@ impl Log {
             index: 0,
             entries,
             focused: false,
+            client,
+            account,
         })
     }
 
@@ -259,6 +277,66 @@ impl Block for Log {
             _ => vec![],
         }
     }
+
+    fn load(&mut self) {
+        log::debug!("load");
+        self.entries.clear();
+        let guard = self.client.read().unwrap_or_else(|e| e.into_inner());
+        let client = &*guard;
+        let account = if let Some(account) = self
+            .account
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+        {
+            account
+        } else {
+            let account = match try_signin(client) {
+                Ok(Some(a)) => a,
+                Ok(None) => match try_signup(client) {
+                    Ok(Some(a)) => a,
+                    Ok(None) => {
+                        log::error!("Could not sign in or sign up");
+                        return;
+                    }
+                    Err(e) => {
+                        log::error!("Could not sign up: {}", e);
+                        return;
+                    }
+                },
+                Err(e) => {
+                    log::error!("Could not sign in: {}", e);
+                    return;
+                }
+            };
+            *self.account.write().unwrap_or_else(|e| e.into_inner()) =
+                Some(account.clone());
+            account
+        };
+
+        let entries = match get_entries(client, &account) {
+            Ok(e) => e,
+            Err(e) => {
+                log::error!("Could not get entries: {}", e);
+                return;
+            }
+        };
+        drop(guard);
+        for e in entries {
+            log::debug!("entry: {}", e.hangul);
+            let hangul = match Hangul::try_from(e.hangul.as_str()) {
+                Ok(h) => h,
+                Err(e) => {
+                    log::error!("Could not resolve hangul: {}", e);
+                    continue;
+                }
+            };
+            self.insert_entry(hangul, e.description);
+        }
+        self.index = 0;
+    }
+
+    fn unload(&mut self) {}
 }
 
 macro_rules! up {
@@ -309,4 +387,39 @@ impl Input for Log {
     fn unfocus(&mut self) {
         self.focused = false
     }
+}
+
+// None if account does not exist
+fn try_signin(client: &Client) -> HttpResult<Option<Account>> {
+    Ok(Request::get(format!("{}/signin", client.remote))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&SignIn {
+            username: client.username.clone(),
+            password: client.password.clone(),
+        })?)?
+        .send()?
+        .json()?)
+}
+
+// None if account does Exist
+fn try_signup(client: &Client) -> HttpResult<Option<Account>> {
+    Ok(Request::post(format!("{}/signup", client.remote))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&SignIn {
+            username: client.username.clone(),
+            password: client.password.clone(),
+        })?)?
+        .send()?
+        .json()?)
+}
+
+fn get_entries(
+    client: &Client,
+    account: &Account,
+) -> HttpResult<Vec<HangulLogRow>> {
+    Ok(Request::get(format!("{}/log", client.remote))
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(account)?)?
+        .send()?
+        .json()?)
 }

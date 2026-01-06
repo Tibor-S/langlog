@@ -303,18 +303,22 @@ impl TryFrom<char> for Syllable {
         if code < 0xac00 || code > 0xd7a3 {
             return Err(SyllableError::InvalidChar(value));
         }
+        log::debug!("code: {}", code);
 
-        let code = code - 0xac00;
-        let ini = code / 588;
-        let code = code % 588;
-        let med = code / 28;
-        let code = code % 28;
+        let code = code - 0xac00; // 0x0dad
+        let ini = code / 588; // 0x0005
+        let code = code % 588; // 0x0231
+        let med = code / 28; // 0x0014
+        let code = code % 28; // 0x0001
         let fin = if code == 0 { None } else { Some(code) };
-        Ok(Self {
+        let syl = Self {
             initial: Some(unsafe { transmute(InitialJamo::G as u16 + ini) }),
             medial: Some(unsafe { transmute(MedialJamo::A as u16 + med) }),
-            finale: fin.map(|f| unsafe { transmute(FinalJamo::G as u16 + f) }),
-        })
+            finale: fin
+                .map(|f| unsafe { transmute(FinalJamo::G as u16 + f - 1) }),
+        };
+        log::debug!("syllable: {}", syl);
+        Ok(syl)
     }
 }
 macro_rules! empty {

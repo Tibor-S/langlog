@@ -181,6 +181,10 @@ impl<K: Ord, V> OrderedMap<K, V> {
         self.get_entry_mut_or_index(key).ok().map(|(_, v)| v)
     }
 
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
     fn binary_search(&self, key: &K) -> Result<usize, usize> {
         self.binary_search_by(|(k, _)| k.cmp(key))
     }

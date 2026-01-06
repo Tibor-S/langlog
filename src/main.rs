@@ -10,7 +10,7 @@ use std::{
 use terminal::{Terminal, TerminalError, code::TerminalCode};
 
 use crate::{
-    host::{Host, HostError},
+    host::{Host, HostError, database::Account},
     scenes::{
         MainItems, help_menu_scene, main_scene, menu_scene, server_scene,
         setup_scene,
@@ -58,36 +58,29 @@ pub struct Client {
 async fn main() -> LanglogResult<()> {
     pretty_env_logger::init();
     let arguments = Arguments::new()?;
-    let host_running = Rc::new(RwLock::new(arguments.host.is_some()));
+    let arg_host = arguments.host.is_some();
+    let host_running = Rc::new(RwLock::new(arg_host));
     let host = Rc::new(RwLock::new(arguments.host.unwrap_or_default()));
     let client = Rc::new(RwLock::new(Client::default()));
-
-    // host::serve(&host).await?;
-    // return Ok(());
-
-    // let db = Database::new(&host.pg_user, &host.pg_password, &host.database_ip)
-    //     .await?;
-    // log::debug!("{:?}", db.sign_up("frisco", "1234").await?);
-    // let account = match db.sign_in("frisco", "1234").await? {
-    //     Some(a) => a,
-    //     None => panic!("lol"),
-    // };
-    // log::debug!("{:?}", account);
-    // for e in db.all_rows(&account).await? {
-    //     log::debug!("{}: {}", e.hangul(), e.description())
-    // }
-    // db.insert_row(&account, "ne", "yes").await?;
-    // for e in db.all_rows(&account).await? {
-    //     log::debug!("{}: {}", e.hangul(), e.description())
-    // }
-    // db.delete_row(&account, "ne").await?;
-    // for e in db.all_rows(&account).await? {
-    //     log::debug!("{}: {}", e.hangul(), e.description())
-    // }
+    let account = Rc::new(RwLock::new(None));
+    if arg_host {
+        let (server_scene, _, _) =
+            server_scene(host.clone(), host_running.clone())?;
+        let mut term = Terminal::new(
+            "sever".into(),
+            server_scene,
+            |k| match k {
+                _ => TerminalCode::UnhandledKey(k),
+            },
+            move || Ok(()),
+        );
+        return term.run(None).map_err(LanglogError::from);
+    }
 
     // Assuming char is 1:2
     // 4:3 becomes 8:3
-    let (main_scene, scenes, MainItems { log, .. }) = main_scene((81, 31))?;
+    let (main_scene, scenes, MainItems { log, .. }) =
+        main_scene((81, 31), client.clone(), account.clone())?;
     let main_log = log.clone();
     let (setup_scene, _, _) =
         setup_scene(client.clone(), host.clone(), host_running.clone())?;
@@ -116,13 +109,14 @@ async fn main() -> LanglogResult<()> {
     }
     term.insert_scene("help".into(), help_menu_scene()?);
 
-    let (menu_scene, scenes) = menu_scene((81, 31), log)?;
+    let (menu_scene, scenes) =
+        menu_scene((81, 31), log, client.clone(), account.clone())?;
     term.insert_scene("menu".into(), menu_scene);
     for (name, scene) in scenes {
         term.insert_scene(name, scene);
     }
 
-    term.run((81, 31)).map_err(LanglogError::from)
+    term.run(Some((81, 31))).map_err(LanglogError::from)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -287,3 +281,15 @@ pub enum LanglogError {
     Host(#[from] HostError),
 }
 pub type LanglogResult<T> = Result<T, LanglogError>;
+
+#[derive(Debug, thiserror::Error)]
+enum HttpError {
+    #[error("{0}")]
+    Isahc(#[from] isahc::Error),
+    #[error("{0}")]
+    Http(#[from] isahc::http::Error),
+    #[error("{0}")]
+    SerdeJson(#[from] serde_json::Error),
+}
+
+type HttpResult<T> = Result<T, HttpError>;

@@ -47,35 +47,45 @@ impl<T> DerefMut for Dispatch<T> {
 }
 impl<B: Block> Block for Dispatch<B> {
     fn pos(&self) -> (u16, u16, u16) {
-        self.read().unwrap().pos()
+        self.read().unwrap_or_else(|e| e.into_inner()).pos()
     }
 
     fn rel_line(&self, i: u16) -> Option<String> {
-        self.read().unwrap().rel_line(i)
+        self.read().unwrap_or_else(|e| e.into_inner()).rel_line(i)
     }
 
     fn style_line(&self, i: u16) -> Vec<(Range<usize>, ContentStyle)> {
-        self.read().unwrap().style_line(i)
+        self.read().unwrap_or_else(|e| e.into_inner()).style_line(i)
+    }
+
+    fn load(&mut self) {
+        self.write().unwrap_or_else(|e| e.into_inner()).load()
+    }
+
+    fn unload(&mut self) {
+        self.write().unwrap_or_else(|e| e.into_inner()).unload()
     }
 }
 impl<I: Input> Input for Dispatch<I> {
     fn feed(&mut self, key: KeyEvent) -> TerminalCode {
-        self.write().unwrap().feed(key)
+        self.write().unwrap_or_else(|e| e.into_inner()).feed(key)
     }
 
     fn rel_cursor_pos(&self) -> Option<(u16, u16)> {
-        self.read().unwrap().rel_cursor_pos()
+        self.read()
+            .unwrap_or_else(|e| e.into_inner())
+            .rel_cursor_pos()
     }
 
     fn input_pos(&self) -> (u16, u16) {
-        self.read().unwrap().input_pos()
+        self.read().unwrap_or_else(|e| e.into_inner()).input_pos()
     }
 
     fn focus(&mut self) {
-        self.0.write().unwrap().focus();
+        self.0.write().unwrap_or_else(|e| e.into_inner()).focus();
     }
 
     fn unfocus(&mut self) {
-        self.0.write().unwrap().unfocus();
+        self.0.write().unwrap_or_else(|e| e.into_inner()).unfocus();
     }
 }
