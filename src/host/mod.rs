@@ -7,7 +7,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::host::database::{Account, Database, DatabaseError, HangulLogRow};
+use crate::{
+    hangul::Hangul,
+    hangul_parser::HangulParser,
+    host::database::{Account, Database, DatabaseError, HangulLogRow},
+    syllable::Syllable,
+};
 
 pub mod database;
 
@@ -24,6 +29,7 @@ pub async fn serve(host: &Host) -> HostResult<()> {
         Database::new(&host.pg_user, &host.pg_password, &host.database_ip)
             .await?,
     );
+    let parser = Arc::new(HangulParser::new());
     log::info!(
         "Connected to database: {}@{}",
         &host.pg_user,
@@ -67,6 +73,20 @@ pub async fn serve(host: &Host) -> HostResult<()> {
             delete({
                 let db = Arc::clone(&database);
                 move |body| log_delete_entry(body, db)
+            }),
+        )
+        .route(
+            "/parse/rr",
+            delete({
+                let parser = Arc::clone(&parser);
+                move |body| parse_rr(body, parser)
+            }),
+        )
+        .route(
+            "/parse/syllable",
+            delete({
+                let parser = Arc::clone(&parser);
+                move |body| parse_syllable(body, parser)
             }),
         );
     axum::serve(listener, app).await.map_err(HostError::from)
@@ -155,6 +175,50 @@ async fn log_delete_entry(
     }
 }
 
+async fn parse_syllable(
+    Json(RR { text }): Json<RR>,
+    parser: Arc<HangulParser>,
+) -> (StatusCode, Json<SyllableResponse>) {
+    let (syllable, rest) = parser.parse_syllable(&text);
+
+    (
+        StatusCode::OK,
+        Json::from(SyllableResponse {
+            syllable,
+            err_index: if text.is_empty() {
+                None
+            } else {
+                Some(text.chars().count() - rest.chars().count())
+            },
+        }),
+    )
+}
+
+async fn parse_rr(
+    Json(RR { text: org_text }): Json<RR>,
+    parser: Arc<HangulParser>,
+) -> (StatusCode, Json<HangulResponse>) {
+    let mut hangul = Hangul::default();
+    let mut text: &str = &org_text;
+    while let (syl, next) = parser.parse_syllable(text)
+        && !syl.is_empty()
+    {
+        text = next;
+        hangul.push(syl);
+    }
+    (
+        StatusCode::OK,
+        Json::from(HangulResponse {
+            hangul,
+            err_index: if text.is_empty() {
+                None
+            } else {
+                Some(org_text.chars().count() - text.chars().count())
+            },
+        }),
+    )
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignIn {
     pub username: String,
@@ -172,6 +236,23 @@ pub struct InsertEntry {
 pub struct DeleteEntry {
     pub account: Account,
     pub hangul: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RR {
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HangulResponse {
+    pub hangul: Hangul,
+    pub err_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyllableResponse {
+    pub syllable: Syllable,
+    pub err_index: Option<usize>,
 }
 
 #[derive(Debug, thiserror::Error)]

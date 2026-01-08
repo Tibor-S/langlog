@@ -5,6 +5,8 @@ use std::{
     mem::transmute,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::jamo::{FinalJamo, InitialJamo, Jamo, JamoError, MedialJamo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -363,6 +365,32 @@ impl hash::Hash for Syllable {
 impl Display for Syllable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char(self.into())
+    }
+}
+impl Serialize for Syllable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_char(self.into())
+    }
+}
+impl<'de> Deserialize<'de> for Syllable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let as_char = <char>::deserialize(deserializer)?;
+        match Syllable::try_from(as_char) {
+            Ok(h) => Ok(h),
+            Err(e) => {
+                log::error!(
+                    "Could not deserialize Syllable from char: {}!",
+                    as_char
+                );
+                panic!("{}", e)
+            }
+        }
     }
 }
 

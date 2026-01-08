@@ -151,7 +151,10 @@ impl<'de> Deserialize<'de> for Hangul {
         match Hangul::try_from(as_string) {
             Ok(h) => Ok(h),
             Err(e) => {
-                log::error!("Could not deserialize Hangul!");
+                log::error!(
+                    "Could not deserialize Hangul from string: {}!",
+                    as_string
+                );
                 panic!("{}", e)
             }
         }
