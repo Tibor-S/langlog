@@ -1,6 +1,7 @@
 use std::{
     env,
     fmt::{self},
+    fs::File,
     rc::Rc,
     sync::RwLock,
 };
@@ -14,6 +15,7 @@ use crate::{
         setup_scene,
     },
 };
+use pretty_env_logger::env_logger::Target;
 
 mod elements;
 mod ext;
@@ -65,12 +67,22 @@ pub struct Client {
 
 #[tokio::main]
 async fn main() -> LanglogResult<()> {
-    pretty_env_logger::init();
+    let log_file = File::create(".langlog-log").unwrap();
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Debug)
+        .target(Target::Pipe(Box::new(log_file)))
+        .init();
+
+    // pretty_env_logger::init();
     let arguments = return_err!(Arguments::new());
     let arg_host = arguments.host.is_some();
     let host_running = Rc::new(RwLock::new(arg_host));
     let host = Rc::new(RwLock::new(arguments.host.unwrap_or_default()));
-    let client = Rc::new(RwLock::new(Client::default()));
+    let client = Rc::new(RwLock::new(Client {
+        remote: "https://hangul-api.tibors.se".into(),
+        username: Default::default(),
+        password: Default::default(),
+    }));
     let account = Rc::new(RwLock::new(None));
     if arg_host {
         let (server_scene, _, _) =

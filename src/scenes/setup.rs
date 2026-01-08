@@ -90,14 +90,18 @@ pub fn setup_scene(
     host_running: Rc<RwLock<bool>>,
 ) -> TerminalResult<(Scene, Vec<(String, Scene)>, SetupItems)> {
     let mut scene = Scene::new(SceneType::Full);
-
+    let Client {
+        remote,
+        username,
+        password,
+    } = &*client.read().unwrap_or_else(|e| e.into_inner());
     let remote = SetupInput::new(
         client.clone(),
         TextLine {
             pos: REMOTE_POS,
             display_width: REMOTE_WIDTH,
-            index: "https://hangul-api.tibors.se".len() as u16,
-            value: "https://hangul-api.tibors.se".into(),
+            index: remote.chars().count() as u16,
+            value: remote.clone(),
         },
         |c, s| c.remote = s.clone(),
     );
@@ -106,8 +110,8 @@ pub fn setup_scene(
         TextLine {
             pos: USERNAME_POS,
             display_width: USERNAME_WIDTH,
-            index: 0,
-            value: String::new(),
+            index: username.chars().count() as u16,
+            value: username.clone(),
         },
         |c, s| c.username = s.clone(),
     );
@@ -116,8 +120,8 @@ pub fn setup_scene(
         TextLine {
             pos: PASSWORD_POS,
             display_width: PASSWORD_WIDTH,
-            index: 0,
-            value: String::new(),
+            index: password.chars().count() as u16,
+            value: password.clone(),
         },
         |c, s| c.password = s.clone(),
     );

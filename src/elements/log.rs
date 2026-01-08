@@ -206,6 +206,7 @@ impl Block for Log {
         self.entries.clear();
         let guard = self.client.read().unwrap_or_else(|e| e.into_inner());
         let client = &*guard;
+        log::debug!("client: {:?}", client);
         let account = if let Some(account) = self
             .account
             .read()
@@ -236,6 +237,7 @@ impl Block for Log {
                 Some(account.clone());
             account
         };
+        log::debug!("account: {:?}", account);
 
         let entries = match get_entries(client, &account) {
             Ok(e) => e,
