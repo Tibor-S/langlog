@@ -315,7 +315,7 @@ impl Input for Log {
 
 // None if account does not exist
 fn try_signin(client: &Client) -> HttpResult<Option<Account>> {
-    Ok(Request::get(format!("{}/signin", client.remote))
+    Ok(Request::post(format!("{}/signin", client.remote))
         .header("Content-Type", "application/json")
         .body(serde_json::to_string(&SignIn {
             username: client.username.clone(),
@@ -341,7 +341,7 @@ fn get_entries(
     client: &Client,
     account: &Account,
 ) -> HttpResult<Vec<HangulLogRow>> {
-    Ok(Request::get(format!("{}/log", client.remote))
+    Ok(Request::post(format!("{}/log", client.remote))
         .header("Content-Type", "application/json")
         .body(serde_json::to_string(account)?)?
         .send()?
