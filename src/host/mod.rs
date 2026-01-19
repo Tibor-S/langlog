@@ -6,6 +6,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     hangul::Hangul,
@@ -38,11 +39,11 @@ pub async fn serve(host: &Host) -> HostResult<()> {
 
     let listener = tokio::net::TcpListener::bind(&host.listening_ip).await?;
     log::info!("Listening on {}", &host.listening_ip);
-
+    let cors = CorsLayer::new().allow_headers(Any).allow_origin(Any);
     let app = Router::new()
         .route(
             "/signin",
-            get({
+            post({
                 let db = Arc::clone(&database);
                 move |body| sign_in(body, db)
             }),
@@ -56,7 +57,7 @@ pub async fn serve(host: &Host) -> HostResult<()> {
         )
         .route(
             "/log",
-            get({
+            post({
                 let db = Arc::clone(&database);
                 move |body| log_all_entries(body, db)
             }),
@@ -88,7 +89,8 @@ pub async fn serve(host: &Host) -> HostResult<()> {
                 let parser = Arc::clone(&parser);
                 move |body| parse_syllable(body, parser)
             }),
-        );
+        )
+        .layer(cors);
     axum::serve(listener, app).await.map_err(HostError::from)
 }
 
