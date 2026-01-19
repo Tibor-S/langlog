@@ -2,6 +2,7 @@ use std::{io, sync::Arc};
 
 use axum::{
     Json, Router,
+    extract::{Path, Query},
     http::StatusCode,
     routing::{delete, get, post},
 };
@@ -78,16 +79,16 @@ pub async fn serve(host: &Host) -> HostResult<()> {
         )
         .route(
             "/parse/rr",
-            delete({
+            get({
                 let parser = Arc::clone(&parser);
-                move |body| parse_rr(body, parser)
+                move |params| parse_rr(params, parser)
             }),
         )
         .route(
             "/parse/syllable",
-            delete({
+            get({
                 let parser = Arc::clone(&parser);
-                move |body| parse_syllable(body, parser)
+                move |params| parse_syllable(params, parser)
             }),
         )
         .layer(cors);
@@ -178,10 +179,10 @@ async fn log_delete_entry(
 }
 
 async fn parse_syllable(
-    Json(RR { text }): Json<RR>,
+    Query(RR { text: org }): Query<RR>,
     parser: Arc<HangulParser>,
 ) -> (StatusCode, Json<SyllableResponse>) {
-    let (syllable, rest) = parser.parse_syllable(&text);
+    let (syllable, text) = parser.parse_syllable(&org);
 
     (
         StatusCode::OK,
@@ -190,18 +191,18 @@ async fn parse_syllable(
             err_index: if text.is_empty() {
                 None
             } else {
-                Some(text.chars().count() - rest.chars().count())
+                Some(org.chars().count() - text.chars().count())
             },
         }),
     )
 }
 
 async fn parse_rr(
-    Json(RR { text: org_text }): Json<RR>,
+    Query(RR { text: org }): Query<RR>,
     parser: Arc<HangulParser>,
 ) -> (StatusCode, Json<HangulResponse>) {
     let mut hangul = Hangul::default();
-    let mut text: &str = &org_text;
+    let mut text: &str = &org;
     while let (syl, next) = parser.parse_syllable(text)
         && !syl.is_empty()
     {
@@ -215,7 +216,7 @@ async fn parse_rr(
             err_index: if text.is_empty() {
                 None
             } else {
-                Some(org_text.chars().count() - text.chars().count())
+                Some(org.chars().count() - text.chars().count())
             },
         }),
     )
