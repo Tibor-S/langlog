@@ -10,3 +10,4 @@ package-lock.json
 *.bat
 .log
 hangul-log.csv
+.langlog-log

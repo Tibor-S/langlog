@@ -42,5 +42,9 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Signin() {
-  return <SigninForm />;
+  return (
+    <div className="w-full h-full flex justify-center items-center">
+      <SigninForm />
+    </div>
+  );
 }

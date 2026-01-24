@@ -137,9 +137,16 @@ body {
   }
 }
 
-@media (orientation: portrait) {
+@media (max-width: 1250px) {
   .portrait-to-col {
     flex-direction: column;
+  }
+  .portrait-to-row {
+    flex-direction: row;
+  }
+  .portrait-to-horz {
+    overflow-y: overflow;
+    overflow-x: scroll;
   }
 }
 
@@ -150,4 +157,8 @@ body {
 
 .text-inherit {
   color: inherit;
+}
+
+.hidden-2 {
+  visibility: hidden;
 }

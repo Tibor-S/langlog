@@ -73,7 +73,7 @@ export default function App() {
   const app_ctx: AppCtx | undefined = useLoaderData();
 
   return (
-    <main className="h-dvh flex flex-col">
+    <main className="max-h-dvh h-dvh flex flex-col">
       <Header className="shrink-0" account={app_ctx?.account} />
       <Content className="w-full flex-1">
         <Outlet context={app_ctx} />

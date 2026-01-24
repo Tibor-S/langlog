@@ -4,6 +4,13 @@ import React from "react";
 import { twMerge } from "tailwind-merge";
 import type { Account, AppCtx, Cookies } from "./interface";
 import { useOutletContext } from "react-router";
+import type { VariantProps } from "class-variance-authority";
+import type { buttonVariants } from "~/components/ui/button";
+
+export type ButtonProps = React.ComponentProps<"button"> &
+  VariantProps<typeof buttonVariants> & {
+    asChild?: boolean;
+  };
 
 export type SetState<T> = Dispatch<SetStateAction<T>>;
 
