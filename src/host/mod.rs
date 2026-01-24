@@ -2,7 +2,7 @@ use std::{io, sync::Arc};
 
 use axum::{
     Json, Router,
-    extract::{Path, Query},
+    extract::Query,
     http::StatusCode,
     routing::{delete, get, post},
 };
@@ -13,6 +13,7 @@ use crate::{
     hangul::Hangul,
     hangul_parser::HangulParser,
     host::database::{Account, Database, DatabaseError, HangulLogRow},
+    jamo::Jamo,
     syllable::Syllable,
 };
 
@@ -92,6 +93,13 @@ pub async fn serve(host: &Host) -> HostResult<()> {
             get({
                 let parser = Arc::clone(&parser);
                 move |params| parse_syllable(params, parser)
+            }),
+        )
+        .route(
+            "/parse/possible",
+            get({
+                let parser = Arc::clone(&parser);
+                move |params| parse_possible(params, parser)
             }),
         )
         .layer(cors);
@@ -225,6 +233,26 @@ async fn parse_rr(
     )
 }
 
+async fn parse_possible(
+    query: Query<RR>,
+    parser: Arc<HangulParser>,
+) -> (StatusCode, Json<PossibleResponse>) {
+    let (
+        code,
+        Json(SyllableResponse {
+            syllable,
+            err_index,
+        }),
+    ) = parse_syllable(query, parser).await;
+    (
+        code,
+        Json::from(PossibleResponse {
+            jamo: syllable.possible(),
+            err_index,
+        }),
+    )
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignIn {
     pub username: String,
@@ -258,6 +286,12 @@ pub struct HangulResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyllableResponse {
     pub syllable: Syllable,
+    pub err_index: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PossibleResponse {
+    pub jamo: Vec<Jamo>,
     pub err_index: Option<usize>,
 }
 

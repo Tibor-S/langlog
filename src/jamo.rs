@@ -5,6 +5,8 @@ use std::{
     mem::transmute,
 };
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 /// ## Jamo
 /// Can represent all relevant jamo
 /// enum values are the unicode value
@@ -375,6 +377,29 @@ impl Debug for Jamo {
 impl Display for Jamo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char(self.into())
+    }
+}
+impl Serialize for Jamo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_char(self.into())
+    }
+}
+impl<'de> Deserialize<'de> for Jamo {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let c = char::deserialize(deserializer)?;
+        match c.try_into() {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                log::error!("{}", e);
+                panic!("{}", e);
+            }
+        }
     }
 }
 

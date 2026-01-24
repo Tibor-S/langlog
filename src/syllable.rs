@@ -61,7 +61,7 @@ impl Syllable {
             State::OpenFinal => {
                 Jamo::all_or_possible(false, (false, None), (true, self.finale))
             }
-            State::End => vec![],
+            State::End => Vec::with_capacity(0),
         }
     }
 
