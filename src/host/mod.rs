@@ -40,7 +40,10 @@ pub async fn serve(host: &Host) -> HostResult<()> {
 
     let listener = tokio::net::TcpListener::bind(&host.listening_ip).await?;
     log::info!("Listening on {}", &host.listening_ip);
-    let cors = CorsLayer::new().allow_headers(Any).allow_origin(Any);
+    let cors = CorsLayer::new()
+        .allow_headers(Any)
+        .allow_origin(Any)
+        .allow_methods(Any);
     let app = Router::new()
         .route(
             "/signin",
