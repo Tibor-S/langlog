@@ -15,8 +15,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const form = await request.formData();
   const username = form.get("username");
   const password = form.get("password");
-  console.log("username: " + username);
-  console.log("password: " + password);
 
   if (typeof username !== "string" || typeof password !== "string") {
     return data({ error: "Invalid form data" }, { status: 400 });
@@ -28,6 +26,10 @@ export async function action({ request }: ActionFunctionArgs) {
   }).then((account) => {
     console.log(account);
     return account;
+  })
+  .catch((e) => {
+    console.log(e);
+    return undefined;
   });
 
   if (!account) {

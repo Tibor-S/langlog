@@ -9,7 +9,9 @@ import type {
 
 export async function signInUp(signin: SignIn): Promise<Account | undefined> {
   let opt = await signIn(signin);
-  return opt ? opt : await signUp(signin);
+  if (opt)
+    return opt;
+  return await signUp(signin);
 }
 
 export async function signIn(signin: SignIn): Promise<Account | undefined> {
@@ -21,11 +23,15 @@ export async function signIn(signin: SignIn): Promise<Account | undefined> {
       "Content-Type": "application/json;charset=UTF-8",
     },
   })
-    .then((res) => res.json())
-    .then((j) => j as Account | undefined);
+    .then((res) => res.json())    
+    .then((j) => j ? j as Account : undefined)
+    .catch((e) => {
+      console.log(e);
+      return undefined;
+    });
 }
 export async function signUp(signin: SignIn): Promise<Account | undefined> {
-  return fetch("https://hangul-api.tibors.se/signin", {
+  return fetch("https://hangul-api.tibors.se/signup", {
     method: "POST",
     body: JSON.stringify(signin),
     headers: {
@@ -34,7 +40,11 @@ export async function signUp(signin: SignIn): Promise<Account | undefined> {
     },
   })
     .then((res) => res.json())
-    .then((j) => j as Account | undefined);
+    .then((j) => j ? j as Account : undefined)
+    .catch((e) => {
+      console.log(e);
+      return undefined;
+    });
 }
 
 export async function parseSyllable(text?: string): Promise<ParsedSyllable> {
